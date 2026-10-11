@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pomodoro</title>
-
+    <title>Pomodoro Study Timer</title>
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -12,51 +11,235 @@
 
     <main class="app">
 
-        <header>
+        <div class="header">
             <h1>Pomodoro</h1>
             <p>Focus. Study. Repeat.</p>
-        </header>
+        </div>
 
         <section class="timer-card">
 
             <div class="modes">
-                <button id="focusMode" class="mode active">
+                <button class="mode active" data-mode="focus">
                     Focus
                 </button>
 
-                <button id="shortBreakMode" class="mode">
+                <button class="mode" data-mode="shortBreak">
                     Short Break
                 </button>
 
-                <button id="longBreakMode" class="mode">
+                <button class="mode" data-mode="longBreak">
                     Long Break
                 </button>
             </div>
 
-            <div id="timer" class="timer">
-                25:00
+            <div id="timer">25:00</div>
+
+            <div id="status">Time to focus.</div>
+
+            <button id="startButton">START</button>
+
+            <div class="round">
+                Round <span id="round">1</span> of 4
             </div>
 
-            <p id="status" class="status">
-                Time to focus.
-            </p>
-
-            <button id="startButton" class="start-button">
-                START
-            </button>
-
-            <div class="rounds">
-                <span>Round</span>
-                <strong id="roundNumber">1</strong>
-                <span>of 4</span>
-            </div>
+            <button id="resetButton">RESET</button>
 
         </section>
 
     </main>
 
+
+    <!-- Right toolbar -->
+
+    <aside class="toolbar">
+
+        <button class="tool-button" data-panel="notesPanel" title="Notes">
+            📝
+        </button>
+
+        <button class="tool-button" data-panel="tasksPanel" title="Tasks">
+            ✓
+        </button>
+
+        <button class="tool-button" data-panel="statsPanel" title="Statistics">
+            ▥
+        </button>
+
+        <button class="tool-button" data-panel="settingsPanel" title="Settings">
+            ⚙
+        </button>
+
+    </aside>
+
+
+    <!-- Notes panel -->
+
+    <section class="side-panel" id="notesPanel">
+
+        <div class="panel-header">
+            <h2>Notes</h2>
+            <button class="close-panel">×</button>
+        </div>
+
+        <textarea
+            id="notes"
+            placeholder="Write down anything you want to remember..."
+        ></textarea>
+
+        <button id="saveNotes">Save Notes</button>
+
+        <p id="notesSaved"></p>
+
+    </section>
+
+
+    <!-- Tasks panel -->
+
+    <section class="side-panel" id="tasksPanel">
+
+        <div class="panel-header">
+            <h2>Tasks</h2>
+            <button class="close-panel">×</button>
+        </div>
+
+        <div class="task-input">
+            <input
+                type="text"
+                id="taskInput"
+                placeholder="Add a task..."
+            >
+
+            <button id="addTask">+</button>
+        </div>
+
+        <ul id="taskList"></ul>
+
+    </section>
+
+
+    <!-- Statistics panel -->
+
+    <section class="side-panel stats-panel" id="statsPanel">
+
+        <div class="panel-header">
+            <h2>Statistics</h2>
+            <button class="close-panel">×</button>
+        </div>
+
+        <div class="stats-section">
+
+            <h3>Today</h3>
+
+            <div class="stat-grid">
+
+                <div class="stat-box">
+                    <span id="todayTime">0m</span>
+                    <small>Focus Time</small>
+                </div>
+
+                <div class="stat-box">
+                    <span id="todaySessions">0</span>
+                    <small>Pomodoros</small>
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="stats-section">
+
+            <h3>This Week</h3>
+
+            <div id="weeklyChart"></div>
+
+            <div class="week-total">
+                <span id="weekTime">0m</span>
+                <small>Total Focus Time</small>
+            </div>
+
+        </div>
+
+
+        <div class="stats-section">
+
+            <h3>All Time</h3>
+
+            <div class="stat-grid">
+
+                <div class="stat-box">
+                    <span id="allTime">0m</span>
+                    <small>Focus Time</small>
+                </div>
+
+                <div class="stat-box">
+                    <span id="allSessions">0</span>
+                    <small>Pomodoros</small>
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- Settings panel -->
+
+    <section class="side-panel" id="settingsPanel">
+
+        <div class="panel-header">
+            <h2>Settings</h2>
+            <button class="close-panel">×</button>
+        </div>
+
+        <div class="setting">
+
+            <label for="focusLength">
+                Focus Duration
+            </label>
+
+            <select id="focusLength">
+                <option value="25">25 minutes</option>
+                <option value="30">30 minutes</option>
+                <option value="45">45 minutes</option>
+                <option value="50">50 minutes</option>
+            </select>
+
+        </div>
+
+        <div class="setting">
+
+            <label for="breakLength">
+                Short Break
+            </label>
+
+            <select id="breakLength">
+                <option value="5">5 minutes</option>
+                <option value="10">10 minutes</option>
+                <option value="15">15 minutes</option>
+            </select>
+
+        </div>
+
+        <div class="setting">
+
+            <label for="longBreakLength">
+                Long Break
+            </label>
+
+            <select id="longBreakLength">
+                <option value="15">15 minutes</option>
+                <option value="20">20 minutes</option>
+                <option value="30">30 minutes</option>
+            </select>
+
+        </div>
+
+    </section>
+
+
     <script src="script.js"></script>
 
 </body>
 </html>
-
