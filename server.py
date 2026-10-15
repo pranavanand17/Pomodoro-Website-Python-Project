@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import json
 import os
 import sqlite3
@@ -230,6 +231,51 @@ def get_stats(db):
     }
 
 
+# --- Simple local AI helper (no external dependencies) ---------------------
+
+def _local_ai_response(message: str) -> str:
+    """
+    Very small rule-based assistant that recognizes common questions
+    about the app and gives helpful, actionable answers. If you want full
+    LLM integration, you can replace this with an API call to your chosen
+    model provider.
+    """
+    if not message:
+        return "Hi — tell me what you want help with (e.g. 'Add a new subject', 'How do I start a session', 'Show my stats')."
+
+    text = message.lower().strip()
+
+    if any(g in text for g in ("hi", "hello", "hey")):
+        return "Hello! I'm your study assistant. Ask me things like 'start a session', 'how many minutes today', or 'add a task'."
+
+    if "add subject" in text or "new subject" in text:
+        return "To add a subject: click the + subject button in the app, or send a POST to /api/subjects with JSON {\"name\": \"Subject Name\"}."
+
+    if "add task" in text or "new task" in text:
+        return "To add a task: click 'Add task' in the UI, or POST to /api/tasks with {\"title\": \"Task title\", \"subject_id\": <id>, \"due_date\": \"YYYY-MM-DD\"}."
+
+    if "start session" in text or "start timer" in text:
+        return "To start a session: pick a task and click start in the UI. You can also POST to /api/session with {\"duration\": 25, \"task_id\": <id>}."
+
+    if "stats" in text or "minutes" in text or "today" in text:
+        return "Open the stats panel in the app to see today's and weekly totals. The app stores session minutes in the database table 'sessions'."
+
+    if "help" in text:
+        return ("I can help with quick tips about using the Pomodoro app. "
+                "Ask me about adding subjects/tasks, starting a session, or viewing stats. "
+                "If you'd like a stronger AI, set OPENAI_API_KEY and add integration code.")
+
+    # Fallback helpful suggestions
+    return ("I don't fully understand that request, but here are some things I can do:\n"
+            "- Explain how to add a subject or task\n"
+            "- Show how to start a session (and the API call)\n"
+            "- Describe where data is stored\n\n"
+            "Try: 'Add subject', 'Add task', 'Start session', or 'How many minutes today?'.")
+
+
+# -------------------------------------------------------------------------
+
+
 class PomodoroHandler(SimpleHTTPRequestHandler):
     def send_json(self, data, status=200):
         payload = json.dumps(data).encode("utf-8")
@@ -310,6 +356,21 @@ class PomodoroHandler(SimpleHTTPRequestHandler):
 
         try:
             data = self.read_json()
+
+            # New AI endpoint
+            if path == "/api/ai":
+                # expected payload: {"message": "..."}
+                message = str(data.get("message", "")).strip()
+                if len(message) > 2000:
+                    self.api_error("Message too long.", 400)
+                    return
+
+                # Use local rule-based helper for now
+                reply = _local_ai_response(message)
+
+                # Return a JSON reply; clients can style it however they like
+                self.send_json({"success": True, "reply": reply})
+                return
 
             if path == "/api/subjects":
                 name = str(data.get("name", "")).strip()
@@ -591,4 +652,3 @@ if __name__ == "__main__":
         print("\nServer stopped.")
     finally:
         server.server_close()
-
