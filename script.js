@@ -1,10 +1,4 @@
 
-"use strict";
-
-/* =========================
-   STATE
-========================= */
-
 const DEFAULT_SETTINGS = {
     focus: 25,
     shortBreak: 5,
@@ -13,10 +7,14 @@ const DEFAULT_SETTINGS = {
     autoStartFocus: false
 };
 
+// ==============================
+// APPLICATION STATE
+// ==============================
+
 let settings = { ...DEFAULT_SETTINGS };
 let currentMode = "focus";
 let round = 1;
-let remainingSeconds = settings.focus * 60;
+let remainingSeconds = DEFAULT_SETTINGS.focus * 60;
 let deadline = null;
 let timerInterval = null;
 let running = false;
@@ -24,86 +22,53 @@ let busyFinishing = false;
 
 let subjects = [];
 let tasks = [];
-let stats = null;
-let selectedTaskId = "";
+let stats = {};
+let selectedTaskId = null;
 let toastTimeout = null;
+
+// AI chat state
+let chatHistory = [];
+let chatBusy = false;
+const MAX_CHAT_HISTORY = 10;
+
+// ==============================
+// DOM HELPERS
+// ==============================
 
 const $ = id => document.getElementById(id);
 
-const timerDisplay = $("timer");
-const startButton = $("startButton");
-const resetButton = $("resetButton");
-const statusDisplay = $("status");
-const roundDisplay = $("round");
-const modeButtons = document.querySelectorAll(".mode");
-const panels = document.querySelectorAll(".side-panel");
-const toolButtons = document.querySelectorAll(".tool-button");
-const backdrop = $("panelBackdrop");
-
-
-/* =========================
-   API
-========================= */
-
 async function api(path, options = {}) {
-    const config = { ...options, headers: { ...(options.headers || {}) } };
+    const requestOptions = {
+        method: options.method || "GET",
+        headers: {
+            "Content-Type": "application/json",
+            ...(options.headers || {})
+        }
+    };
 
-    if (config.body !== undefined) {
-        config.headers["Content-Type"] = "application/json";
-        config.body = JSON.stringify(config.body);
+    if (options.body !== undefined) {
+        requestOptions.body = JSON.stringify(options.body);
     }
 
-    const response = await fetch(path, config);
-    const contentType = response.headers.get("content-type") || "";
+    const response = await fetch(path, requestOptions);
 
-    let result = {};
-    if (contentType.includes("application/json")) {
+    let result;
+
+    try {
         result = await response.json();
+    } catch {
+        throw new Error("The server returned an invalid response.");
     }
 
     if (!response.ok || result.success === false) {
-        throw new Error(result.error || `Request failed (${response.status})`);
+        throw new Error(
+            result.error ||
+            result.message ||
+            `Request failed (${response.status}).`
+        );
     }
 
     return result;
-}
-
-async function refreshData() {
-    const data = await api("/api/data");
-
-    subjects = data.subjects || [];
-    tasks = data.tasks || [];
-    stats = data.stats;
-    settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
-
-    $("notes").value = data.notes || "";
-
-    applySettingsToForm();
-    renderSubjects();
-    renderTasks();
-    renderTaskOptions();
-    updateStats(stats);
-    updateConnectionStatus(true);
-}
-
-function updateConnectionStatus(connected) {
-    const element = $("connectionStatus");
-    element.textContent = connected
-        ? "Local database connected"
-        : "Database connection unavailable";
-    element.classList.toggle("offline", !connected);
-}
-
-function showToast(message, isError = false) {
-    const element = $("toast");
-    element.textContent = message;
-    element.classList.toggle("error", isError);
-    element.classList.add("visible");
-
-    clearTimeout(toastTimeout);
-    toastTimeout = setTimeout(() => {
-        element.classList.remove("visible");
-    }, 2800);
 }
 
 function escapeText(value) {
@@ -116,66 +81,147 @@ function escapeText(value) {
     })[character]);
 }
 
-function formatTime(minutes) {
-    minutes = Number(minutes) || 0;
+function formatTime(seconds) {
+    const safeSeconds = Math.max(0, Math.floor(seconds));
+    const minutes = Math.floor(safeSeconds / 60);
+    const secs = safeSeconds % 60;
 
-    if (minutes < 60) return `${minutes}m`;
-
-    const hours = Math.floor(minutes / 60);
-    const remainder = minutes % 60;
-
-    return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
+    return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
+function showToast(message, isError = false) {
+    const toast = $("toast");
+    if (!toast) return;
 
-/* =========================
-   TIMER
-========================= */
+    toast.textContent = message;
+    toast.classList.toggle("error", isError);
+    toast.classList.add("visible");
+
+    clearTimeout(toastTimeout);
+
+    toastTimeout = setTimeout(() => {
+        toast.classList.remove("visible");
+    }, 3000);
+}
+
+function updateConnectionStatus(connected) {
+    const status = $("connectionStatus");
+    if (!status) return;
+
+    status.textContent = connected ? "CONNECTED" : "OFFLINE";
+    status.classList.toggle("connected", connected);
+    status.classList.toggle("disconnected", !connected);
+}
+
+// ==============================
+// DATA LOADING
+// ==============================
+
+async function refreshData() {
+    const data = await api("/api/data");
+
+    subjects = Array.isArray(data.subjects) ? data.subjects : [];
+    tasks = Array.isArray(data.tasks) ? data.tasks : [];
+    stats = data.stats || {};
+
+    settings = {
+        ...DEFAULT_SETTINGS,
+        ...(data.settings || {})
+    };
+
+    if (data.notes !== undefined && $("notes")) {
+        $("notes").value = data.notes || "";
+    }
+
+    if ($("focusLength")) {
+        $("focusLength").value = settings.focus;
+    }
+
+    if ($("breakLength")) {
+        $("breakLength").value = settings.shortBreak;
+    }
+
+    if ($("longBreakLength")) {
+        $("longBreakLength").value = settings.longBreak;
+    }
+
+    if ($("autoStartBreaks")) {
+        $("autoStartBreaks").checked = settings.autoStartBreaks;
+    }
+
+    if ($("autoStartFocus")) {
+        $("autoStartFocus").checked = settings.autoStartFocus;
+    }
+
+    renderSubjects();
+    renderTasks();
+    renderTaskSelect();
+    renderStats();
+
+    updateConnectionStatus(true);
+}
+
+// ==============================
+// POMODORO TIMER
+// ==============================
 
 function durationFor(mode = currentMode) {
-    const key = {
-        focus: "focus",
-        shortBreak: "shortBreak",
-        longBreak: "longBreak"
-    }[mode];
-
-    return (Number(settings[key]) || DEFAULT_SETTINGS[key]) * 60;
+    switch (mode) {
+        case "shortBreak":
+            return Number(settings.shortBreak) * 60;
+        case "longBreak":
+            return Number(settings.longBreak) * 60;
+        default:
+            return Number(settings.focus) * 60;
+    }
 }
 
 function updateDisplay() {
-    const seconds = Math.max(0, Math.ceil(remainingSeconds));
-    const minutes = Math.floor(seconds / 60);
-    const remainder = seconds % 60;
-
-    timerDisplay.textContent =
-        `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
-
-    roundDisplay.textContent = round;
-
-    modeButtons.forEach(button => {
-        const active = button.dataset.mode === currentMode;
-        button.classList.toggle("active", active);
-        button.setAttribute("aria-pressed", String(active));
-    });
-
-    document.title = `${timerDisplay.textContent} · Pomodoro`;
-
-    startButton.textContent = running ? "PAUSE" : "START";
-}
-
-function updateStatus(message) {
-    if (message) {
-        statusDisplay.textContent = message;
-        return;
+    const timer = $("timer");
+    if (timer) {
+        timer.textContent = formatTime(remainingSeconds);
     }
 
-    const messages = {
-        focus: "Time to focus.",
-        shortBreak: "Take a short break.",
-        longBreak: "Step away and recharge."
+    document.body.dataset.mode = currentMode;
+
+    const themeColor = {
+        focus: "#ba4949",
+        shortBreak: "#397f8a",
+        longBreak: "#467b65"
+    }[currentMode];
+    document.querySelector('meta[name="theme-color"]')?.setAttribute(
+        "content",
+        themeColor
+    );
+
+    document.title = running
+        ? `${formatTime(remainingSeconds)} | Study Space`
+        : "Study Space | Pomodoro";
+
+    document.querySelectorAll(".mode[data-mode]").forEach(button => {
+        button.classList.toggle(
+            "active",
+            button.dataset.mode === currentMode
+        );
+    });
+
+    const roundDisplay = $("round");
+    if (roundDisplay) {
+        roundDisplay.textContent = round;
+    }
+}
+
+function updateStatus() {
+    const status = $("status");
+    if (!status) return;
+
+    const labels = {
+        focus: running ? "Focus session in progress." : "Time to focus.",
+        shortBreak: running ? "Short break in progress." : "Take a short break.",
+        longBreak: running ? "Long break in progress." : "Step away and recharge."
     };
 
-    statusDisplay.textContent = messages[currentMode];
+    status.textContent = labels[currentMode] || "READY";
 }
 
 function stopInterval() {
@@ -186,72 +232,74 @@ function stopInterval() {
 }
 
 function syncRemainingFromClock() {
-    if (deadline !== null) {
-        remainingSeconds = Math.max(0, (deadline - Date.now()) / 1000);
+    if (!running || deadline === null) return;
+
+    remainingSeconds = Math.max(
+        0,
+        Math.ceil((deadline - Date.now()) / 1000)
+    );
+
+    updateDisplay();
+
+    if (remainingSeconds <= 0) {
+        finishSession();
     }
 }
 
 function startTimer() {
-    if (busyFinishing) return;
-
-    if (running) {
-        pauseTimer();
-        return;
-    }
-
-    if (remainingSeconds <= 0) {
-        remainingSeconds = durationFor();
-    }
+    if (running || busyFinishing) return;
 
     running = true;
     deadline = Date.now() + remainingSeconds * 1000;
 
+    stopInterval();
+
+    timerInterval = setInterval(syncRemainingFromClock, 250);
+
+    const startButton = $("startButton");
+    if (startButton) startButton.textContent = "Pause";
+
     updateDisplay();
     updateStatus();
-
-    timerInterval = setInterval(() => {
-        syncRemainingFromClock();
-        updateDisplay();
-
-        if (remainingSeconds <= 0) {
-            stopInterval();
-            running = false;
-            deadline = null;
-            finishSession();
-        }
-    }, 200);
 }
 
 function pauseTimer() {
-    syncRemainingFromClock();
+    if (!running) return;
+
+    remainingSeconds = Math.max(
+        0,
+        Math.ceil((deadline - Date.now()) / 1000)
+    );
+
     running = false;
     deadline = null;
+
     stopInterval();
+
+    const startButton = $("startButton");
+    if (startButton) startButton.textContent = "Start";
+
     updateDisplay();
-    updateStatus("Timer paused. Resume when you're ready.");
+    updateStatus();
 }
 
 function resetTimer() {
-    running = false;
-    deadline = null;
-    stopInterval();
+    pauseTimer();
 
     remainingSeconds = durationFor();
+
     updateDisplay();
     updateStatus();
 }
 
 function setMode(mode) {
-    if (!Object.hasOwn({ focus: 1, shortBreak: 1, longBreak: 1 }, mode)) {
-        return;
-    }
+    const allowedModes = ["focus", "shortBreak", "longBreak"];
+    if (!allowedModes.includes(mode)) return;
 
-    running = false;
-    deadline = null;
-    stopInterval();
+    pauseTimer();
 
     currentMode = mode;
-    remainingSeconds = durationFor();
+    remainingSeconds = durationFor(mode);
 
     updateDisplay();
     updateStatus();
@@ -261,108 +309,118 @@ async function finishSession() {
     if (busyFinishing) return;
 
     busyFinishing = true;
-    running = false;
-    deadline = null;
-    stopInterval();
+    pauseTimer();
     remainingSeconds = 0;
     updateDisplay();
 
+    const completedMode = currentMode;
+    const completedDuration = durationFor(completedMode);
+
     try {
-        if (currentMode === "focus") {
-            const duration = Number(settings.focus);
-            const taskId = selectedTaskId || null;
+        if (completedMode === "focus") {
+            await api("/api/session", {
+                method: "POST",
+                body: {
+                    duration: Math.round(completedDuration / 60),
+                    task_id: selectedTaskId || null
+                }
+            });
 
-            try {
-                await api("/api/session", {
-                    method: "POST",
-                    body: { duration, task_id: taskId }
-                });
+            round++;
 
-                await refreshData();
-                showToast("Focus session saved.");
-            } catch (error) {
-                showToast(
-                    `Session could not be saved: ${error.message}`,
-                    true
-                );
-            }
+            showToast("Focus session completed.");
 
-            currentMode = round >= 4 ? "longBreak" : "shortBreak";
-            remainingSeconds = durationFor();
-
-            updateDisplay();
-            updateStatus("Focus session complete. Take your break.");
-
-        	
-	if (settings.autoStartBreaks) {
-   		 busyFinishing = false;
-    		startTimer();
-	}
-	} else {
-            if (currentMode === "shortBreak") {
-                round = round >= 4 ? 1 : round + 1;
-            } else {
-                round = 1;
-            }
-
+            currentMode = round % 4 === 1
+                ? "longBreak"
+                : "shortBreak";
+        } else {
+            showToast("Break completed.");
             currentMode = "focus";
-            remainingSeconds = durationFor();
+        }
 
-            updateDisplay();
-            updateStatus("Break complete. Ready for another focus session.");
+        remainingSeconds = durationFor();
 
-        	if (settings.autoStartFocus) {
-    busyFinishing = false;
-    startTimer();
-}
-	}
+        await refreshData();
+    } catch (error) {
+        console.error("Could not save session:", error);
+        showToast("Session finished, but saving failed.", true);
+
+        if (completedMode === "focus") {
+            round++;
+            currentMode = round % 4 === 1
+                ? "longBreak"
+                : "shortBreak";
+        } else {
+            currentMode = "focus";
+        }
+
+        remainingSeconds = durationFor();
     } finally {
         busyFinishing = false;
         updateDisplay();
+        updateStatus();
+
+        const shouldAutoStart =
+            (currentMode !== "focus" && settings.autoStartBreaks) ||
+            (currentMode === "focus" && settings.autoStartFocus);
+
+        if (shouldAutoStart) {
+            startTimer();
+        }
     }
 }
 
-startButton.addEventListener("click", startTimer);
-resetButton.addEventListener("click", resetTimer);
-
-modeButtons.forEach(button => {
-    button.addEventListener("click", () => setMode(button.dataset.mode));
-});
-
-
-/* =========================
-   PANELS
-========================= */
+// ==============================
+// PANEL NAVIGATION
+// ==============================
 
 function openPanel(id) {
-    panels.forEach(panel => panel.classList.remove("open"));
+    closePanels();
 
     const panel = $(id);
     if (!panel) return;
 
     panel.classList.add("open");
-    backdrop.classList.add("visible");
-    document.body.classList.add("panel-open");
+
+    const backdrop = $("panelBackdrop");
+    if (backdrop) backdrop.classList.add("visible");
+
+    document.querySelectorAll("[data-panel]").forEach(button => {
+        button.classList.toggle("active", button.dataset.panel === id);
+    });
 
     if (id === "statsPanel") {
-        refreshData().catch(error => showToast(error.message, true));
+        refreshData().catch(error => {
+            console.error("Could not refresh statistics:", error);
+            showToast("Could not refresh statistics.", true);
+        });
+    }
+
+    if (id === "chatPanel") {
+        scrollChatToBottom();
+
+        setTimeout(() => {
+            if (!chatBusy) $("chatInput")?.focus();
+        }, 200);
     }
 }
 
 function closePanels() {
-    panels.forEach(panel => panel.classList.remove("open"));
-    backdrop.classList.remove("visible");
-    document.body.classList.remove("panel-open");
+    document.querySelectorAll(".side-panel").forEach(panel => {
+        panel.classList.remove("open");
+    });
+
+    const backdrop = $("panelBackdrop");
+    if (backdrop) backdrop.classList.remove("visible");
+
+    document.querySelectorAll("[data-panel]").forEach(button => {
+        button.classList.remove("active");
+    });
 }
 
-toolButtons.forEach(button => {
+document.querySelectorAll("[data-panel]").forEach(button => {
     button.addEventListener("click", () => {
-        const panel = $(button.dataset.panel);
-        if (panel?.classList.contains("open")) {
-            closePanels();
-        } else {
-            openPanel(button.dataset.panel);
-        }
+        openPanel(button.dataset.panel);
     });
 });
 
@@ -370,22 +428,74 @@ document.querySelectorAll(".close-panel").forEach(button => {
     button.addEventListener("click", closePanels);
 });
 
-backdrop.addEventListener("click", closePanels);
+$("panelBackdrop")?.addEventListener("click", closePanels);
 
 document.addEventListener("keydown", event => {
     if (event.key === "Escape") closePanels();
 });
 
+// ==============================
+// SUBJECTS
+// ==============================
 
-/* =========================
-   SUBJECTS
-========================= */
+function renderSubjects() {
+    const taskSubject = $("taskSubject");
+    const selectedTaskSubject = taskSubject?.value || "";
+    if (taskSubject) {
+        taskSubject.innerHTML = `
+            <option value="">Unassigned</option>
+            ${subjects.map(subject => `
+                <option value="${escapeText(subject.id)}">
+                    ${escapeText(subject.name)}
+                </option>
+            `).join("")}
+        `;
+        taskSubject.value = selectedTaskSubject;
+    }
 
-$("subjectForm").addEventListener("submit", async event => {
+    const subjectFilter = $("subjectFilter");
+    const selectedFilter = subjectFilter?.value || "all";
+    if (subjectFilter) {
+        subjectFilter.innerHTML = `
+            <option value="all">All subjects</option>
+            ${subjects.map(subject => `
+                <option value="${escapeText(subject.id)}">
+                    ${escapeText(subject.name)}
+                </option>
+            `).join("")}
+        `;
+        subjectFilter.value = subjects.some(
+            subject => String(subject.id) === selectedFilter
+        ) ? selectedFilter : "all";
+    }
+
+    const list = $("subjectList");
+    if (!list) return;
+
+    if (subjects.length === 0) {
+        list.innerHTML = '<p class="empty-state">No subjects yet. Add one to organise your work.</p>';
+        return;
+    }
+
+    list.innerHTML = subjects.map(subject => `
+        <div class="subject-item" data-id="${escapeText(subject.id)}">
+            <span>${escapeText(subject.name)}</span>
+            <button
+                type="button"
+                class="delete-subject"
+                data-id="${escapeText(subject.id)}"
+                aria-label="Delete ${escapeText(subject.name)}"
+            >×</button>
+        </div>
+    `).join("");
+}
+
+$("subjectForm")?.addEventListener("submit", async event => {
     event.preventDefault();
 
     const input = $("subjectInput");
-    const name = input.value.trim();
+    const name = input?.value.trim();
+
     if (!name) return;
 
     try {
@@ -396,73 +506,121 @@ $("subjectForm").addEventListener("submit", async event => {
 
         input.value = "";
         await refreshData();
-        showToast("Subject created.");
+        showToast("Subject added.");
     } catch (error) {
-        showToast(error.message, true);
+        showToast(error.message || "Could not add subject.", true);
     }
 });
 
-function renderSubjects() {
-    const list = $("subjectList");
-
-    if (!subjects.length) {
-        list.innerHTML = '<p class="empty-state">No subjects yet. Add one to organise your work.</p>';
-    } else {
-        list.innerHTML = subjects.map(subject => `
-            <div class="subject-item">
-                <div class="subject-dot"></div>
-                <div class="subject-info">
-                    <strong>${escapeText(subject.name)}</strong>
-                    <small>${Number(subject.completed_count) || 0} of ${Number(subject.task_count) || 0} tasks done</small>
-                </div>
-                <button class="icon-action delete-subject"
-                        data-id="${subject.id}"
-                        title="Delete subject and keep its tasks unassigned"
-                        aria-label="Delete ${escapeText(subject.name)}">×</button>
-            </div>
-        `).join("");
-    }
-
-    const subjectOptions = subjects.map(subject =>
-        `<option value="${subject.id}">${escapeText(subject.name)}</option>`
-    ).join("");
-
-    $("taskSubject").innerHTML =
-        '<option value="">Unassigned</option>' + subjectOptions;
-
-    $("subjectFilter").innerHTML =
-        '<option value="all">All subjects</option>' + subjectOptions;
-}
-
-$("subjectList").addEventListener("click", async event => {
+$("subjectList")?.addEventListener("click", async event => {
     const button = event.target.closest(".delete-subject");
     if (!button) return;
 
-    const subject = subjects.find(item => item.id === Number(button.dataset.id));
-    if (!subject) return;
-
-    if (!confirm(
-        `Delete subject "${subject.name}"? Its tasks will remain, but become unassigned. Past study records will be preserved.`
-    )) return;
-
     try {
-        await api(`/api/subjects/${subject.id}`, { method: "DELETE" });
+        await api(`/api/subjects/${encodeURIComponent(button.dataset.id)}`, {
+            method: "DELETE"
+        });
+
         await refreshData();
         showToast("Subject deleted.");
     } catch (error) {
-        showToast(error.message, true);
+        showToast(error.message || "Could not delete subject.", true);
     }
 });
 
+// ==============================
+// TASKS
+// ==============================
 
-/* =========================
-   TASKS
-========================= */
+function renderTaskSelect() {
+    const select = $("sessionTask");
+    if (!select) return;
 
-$("taskForm").addEventListener("submit", async event => {
+    const previousValue = selectedTaskId;
+
+    select.innerHTML = `
+        <option value="">No task selected</option>
+        ${tasks
+            .filter(task => !task.completed)
+            .map(task => `
+                <option value="${escapeText(task.id)}">
+                    ${escapeText(task.title)}
+                </option>
+            `).join("")}
+    `;
+
+    const stillExists = tasks.some(task =>
+        String(task.id) === String(previousValue) && !task.completed
+    );
+
+    selectedTaskId = stillExists ? previousValue : null;
+    select.value = selectedTaskId || "";
+}
+
+function renderTasks() {
+    const list = $("taskList");
+    if (!list) return;
+
+    const filter = $("taskFilter")?.value || "all";
+    const subjectFilter = $("subjectFilter")?.value || "all";
+    const completedCount = tasks.filter(task => task.completed).length;
+    const progress = $("taskProgress");
+    if (progress) {
+        progress.textContent = `${completedCount} / ${tasks.length} done`;
+    }
+
+    const visibleTasks = tasks.filter(task => {
+        if (filter === "active") return !task.completed;
+        if (filter === "completed") return Boolean(task.completed);
+        return true;
+    }).filter(task => {
+        return subjectFilter === "all" ||
+            String(task.subject_id || "") === subjectFilter;
+    });
+
+    if (visibleTasks.length === 0) {
+        list.innerHTML = '<p class="empty-state">No tasks to display.</p>';
+        return;
+    }
+
+    list.innerHTML = visibleTasks.map(task => {
+        const subject = subjects.find(
+            item => String(item.id) === String(task.subject_id)
+        );
+
+        return `
+            <div class="task-item ${task.completed ? "completed" : ""}"
+                 data-id="${escapeText(task.id)}">
+                <label class="task-label">
+                    <input
+                        type="checkbox"
+                        class="task-checkbox"
+                        data-id="${escapeText(task.id)}"
+                        ${task.completed ? "checked" : ""}
+                    >
+                    <span class="task-title">${escapeText(task.title)}</span>
+                </label>
+                <div class="task-meta">
+                    ${subject ? `<span>${escapeText(subject.name)}</span>` : ""}
+                    ${task.due_date ? `<span>${escapeText(task.due_date)}</span>` : ""}
+                    <button
+                        type="button"
+                        class="delete-task"
+                        data-id="${escapeText(task.id)}"
+                        aria-label="Delete task"
+                    >×</button>
+                </div>
+            </div>
+        `;
+    }).join("");
+}
+
+$("taskForm")?.addEventListener("submit", async event => {
     event.preventDefault();
 
-    const title = $("taskInput").value.trim();
+    const titleInput = $("taskInput");
+    const title = titleInput?.value.trim();
+
     if (!title) return;
 
     try {
@@ -470,191 +628,116 @@ $("taskForm").addEventListener("submit", async event => {
             method: "POST",
             body: {
                 title,
-                subject_id: $("taskSubject").value || null,
-                due_date: $("taskDueDate").value || null
+                subject_id: $("taskSubject")?.value || null,
+                due_date: $("taskDueDate")?.value || null
             }
         });
 
-        $("taskInput").value = "";
-        $("taskDueDate").value = "";
+        titleInput.value = "";
+
+        if ($("taskDueDate")) $("taskDueDate").value = "";
 
         await refreshData();
         showToast("Task added.");
     } catch (error) {
-        showToast(error.message, true);
+        showToast(error.message || "Could not add task.", true);
     }
 });
 
-function renderTaskOptions() {
-    const select = $("sessionTask");
-    const previous = selectedTaskId;
-
-    select.innerHTML = '<option value="">No task selected</option>' +
-        tasks.filter(task => !task.completed).map(task => `
-            <option value="${task.id}">
-                ${escapeText(task.title)}${task.subject_name
-                    ? " · " + escapeText(task.subject_name)
-                    : ""}
-            </option>
-        `).join("");
-
-    if (previous && tasks.some(task =>
-        String(task.id) === String(previous) && !task.completed
-    )) {
-        select.value = String(previous);
-    } else {
-        selectedTaskId = "";
-        select.value = "";
-    }
-}
-
-$("sessionTask").addEventListener("change", event => {
-    selectedTaskId = event.target.value;
+$("sessionTask")?.addEventListener("change", event => {
+    selectedTaskId = event.target.value || null;
 });
 
-function renderTasks() {
-    const list = $("taskList");
-    const taskFilter = $("taskFilter").value;
-    const subjectFilter = $("subjectFilter").value;
+$("taskFilter")?.addEventListener("change", renderTasks);
+$("subjectFilter")?.addEventListener("change", renderTasks);
 
-    const completedCount = tasks.filter(task => task.completed).length;
-    $("taskProgress").textContent = `${completedCount} / ${tasks.length} done`;
-
-    let visibleTasks = tasks.filter(task => {
-        if (taskFilter === "active" && task.completed) return false;
-        if (taskFilter === "completed" && !task.completed) return false;
-
-        if (subjectFilter !== "all" &&
-            String(task.subject_id || "") !== subjectFilter) return false;
-
-        return true;
-    });
-
-    if (!visibleTasks.length) {
-        list.innerHTML = '<p class="empty-state">Nothing here yet. Add a task above.</p>';
-        return;
-    }
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    list.innerHTML = visibleTasks.map(task => {
-        let dueLabel = "";
-
-        if (task.due_date) {
-            const due = new Date(`${task.due_date}T00:00:00`);
-            const overdue = !task.completed && due < today;
-            dueLabel = `<small class="due-date ${overdue ? "overdue" : ""}">
-                ${overdue ? "Overdue · " : "Due "}
-                ${escapeText(due.toLocaleDateString(undefined, {
-                    month: "short", day: "numeric"
-                }))}
-            </small>`;
-        }
-
-        return `
-            <article class="task-item ${task.completed ? "completed" : ""}">
-                <input type="checkbox" class="task-check"
-                       data-id="${task.id}"
-                       aria-label="Mark ${escapeText(task.title)} complete"
-                       ${task.completed ? "checked" : ""}>
-                <div class="task-info">
-                    <span class="task-title">${escapeText(task.title)}</span>
-                    <small class="task-subject">${escapeText(task.subject_name || "Unassigned")}</small>
-                    ${dueLabel}
-                </div>
-                <button class="icon-action delete-task" data-id="${task.id}"
-                        aria-label="Delete ${escapeText(task.title)}">×</button>
-            </article>
-        `;
-    }).join("");
-}
-
-$("taskFilter").addEventListener("change", renderTasks);
-$("subjectFilter").addEventListener("change", renderTasks);
-
-$("taskList").addEventListener("change", async event => {
-    const checkbox = event.target.closest(".task-check");
+$("taskList")?.addEventListener("change", async event => {
+    const checkbox = event.target.closest(".task-checkbox");
     if (!checkbox) return;
 
     try {
-        await api(`/api/tasks/${checkbox.dataset.id}`, {
+        await api(`/api/tasks/${encodeURIComponent(checkbox.dataset.id)}`, {
             method: "PATCH",
             body: { completed: checkbox.checked }
         });
 
         await refreshData();
-        showToast(checkbox.checked ? "Task completed." : "Task reopened.");
     } catch (error) {
-        showToast(error.message, true);
+        showToast(error.message || "Could not update task.", true);
         await refreshData();
     }
 });
 
-$("taskList").addEventListener("click", async event => {
+$("taskList")?.addEventListener("click", async event => {
     const button = event.target.closest(".delete-task");
     if (!button) return;
 
-    const task = tasks.find(item => item.id === Number(button.dataset.id));
-    if (!task || !confirm(`Delete "${task.title}"?`)) return;
-
     try {
-        await api(`/api/tasks/${task.id}`, { method: "DELETE" });
+        await api(`/api/tasks/${encodeURIComponent(button.dataset.id)}`, {
+            method: "DELETE"
+        });
 
-        if (String(selectedTaskId) === String(task.id)) {
-            selectedTaskId = "";
+        if (String(selectedTaskId) === String(button.dataset.id)) {
+            selectedTaskId = null;
         }
 
         await refreshData();
         showToast("Task deleted.");
     } catch (error) {
-        showToast(error.message, true);
+        showToast(error.message || "Could not delete task.", true);
     }
 });
 
+// ==============================
+// NOTES
+// ==============================
 
-/* =========================
-   NOTES
-========================= */
-
-$("saveNotes").addEventListener("click", async () => {
+$("saveNotes")?.addEventListener("click", async () => {
     try {
         await api("/api/notes", {
             method: "POST",
-            body: { notes: $("notes").value }
+            body: { notes: $("notes")?.value || "" }
         });
 
-        $("notesSaved").textContent = "Saved to the local database.";
+        const saved = $("notesSaved");
+        if (saved) {
+            saved.textContent = "Saved";
+            setTimeout(() => {
+                saved.textContent = "";
+            }, 2000);
+        }
+
         showToast("Notes saved.");
     } catch (error) {
-        $("notesSaved").textContent = "";
-        showToast(error.message, true);
+        showToast(error.message || "Could not save notes.", true);
     }
 });
 
+// ==============================
+// SETTINGS
+// ==============================
 
-/* =========================
-   SETTINGS
-========================= */
-
-function applySettingsToForm() {
-    $("focusLength").value = String(settings.focus);
-    $("breakLength").value = String(settings.shortBreak);
-    $("longBreakLength").value = String(settings.longBreak);
-    $("autoStartBreaks").checked = Boolean(settings.autoStartBreaks);
-    $("autoStartFocus").checked = Boolean(settings.autoStartFocus);
-}
-
-$("settingsForm").addEventListener("submit", async event => {
+$("settingsForm")?.addEventListener("submit", async event => {
     event.preventDefault();
 
     const newSettings = {
-        focus: Number($("focusLength").value),
-        shortBreak: Number($("breakLength").value),
-        longBreak: Number($("longBreakLength").value),
-        autoStartBreaks: $("autoStartBreaks").checked,
-        autoStartFocus: $("autoStartFocus").checked
+        focus: Number($("focusLength")?.value) || DEFAULT_SETTINGS.focus,
+        shortBreak: Number($("breakLength")?.value) || DEFAULT_SETTINGS.shortBreak,
+        longBreak: Number($("longBreakLength")?.value) || DEFAULT_SETTINGS.longBreak,
+        autoStartBreaks: Boolean($("autoStartBreaks")?.checked),
+        autoStartFocus: Boolean($("autoStartFocus")?.checked)
     };
+
+    const validLengths = [
+        newSettings.focus,
+        newSettings.shortBreak,
+        newSettings.longBreak
+    ].every(value => Number.isFinite(value) && value >= 1 && value <= 180);
+
+    if (!validLengths) {
+        showToast("Timer lengths must be between 1 and 180 minutes.", true);
+        return;
+    }
 
     try {
         const result = await api("/api/settings", {
@@ -662,155 +745,388 @@ $("settingsForm").addEventListener("submit", async event => {
             body: { settings: newSettings }
         });
 
-        settings = { ...DEFAULT_SETTINGS, ...result.settings };
+        settings = {
+            ...DEFAULT_SETTINGS,
+            ...(result.settings || newSettings)
+        };
 
         if (!running) {
             remainingSeconds = durationFor();
             updateDisplay();
         }
 
-        $("settingsSaved").textContent = "Settings saved.";
+        updateStatus();
         showToast("Settings saved.");
     } catch (error) {
-        showToast(error.message, true);
+        showToast(error.message || "Could not save settings.", true);
     }
 });
 
+// ==============================
+// STATISTICS
+// ==============================
 
-/* =========================
-   ANALYTICS
-========================= */
+function renderStats() {
+    const data = stats || {};
 
-function updateStats(data) {
-    if (!data) return;
+    const today = data.today || {};
+    const week = data.week || {};
+    const allTime = data.all_time || {};
 
-    $("todayTime").textContent = formatTime(data.today.minutes);
-    $("todaySessions").textContent = data.today.sessions;
-    $("weekTime").textContent = formatTime(data.week.minutes);
-    $("allTime").textContent = formatTime(data.all_time.minutes);
-    $("allSessions").textContent = data.all_time.sessions;
-    $("streakCount").textContent = data.streak;
-    $("streakLabel").textContent =
-        data.streak === 1 ? "consecutive study day" : "consecutive study days";
+    if ($("todayTime")) {
+        $("todayTime").textContent = `${today.minutes || 0} min`;
+    }
 
-    updateWeeklyChart(data.week.days);
-    updateSubjectAnalytics(data.subjects);
-    updateTaskProgress(data.tasks);
+    if ($("todaySessions")) {
+        $("todaySessions").textContent = today.sessions || 0;
+    }
+
+    if ($("weekTime")) {
+        $("weekTime").textContent = `${week.minutes || 0} min`;
+    }
+
+    if ($("streakCount")) {
+        $("streakCount").textContent = data.streak || 0;
+    }
+
+    if ($("streakLabel")) {
+        $("streakLabel").textContent =
+            Number(data.streak || 0) === 1 ? "day streak" : "day streak";
+    }
+
+    if ($("allTime")) {
+        $("allTime").textContent = `${allTime.minutes || 0} min`;
+    }
+
+    if ($("allSessions")) {
+        $("allSessions").textContent = allTime.sessions || 0;
+    }
+
+    renderWeeklyChart(week.days || []);
+    renderSubjectAnalytics(data.subjects || []);
+    renderTaskProgress(data.tasks || []);
 }
 
-function updateWeeklyChart(days) {
+function renderWeeklyChart(days) {
     const chart = $("weeklyChart");
-    chart.innerHTML = "";
+    if (!chart) return;
 
-    const maximum = Math.max(1, ...days.map(day => day.minutes));
-
-    days.forEach(day => {
-        const column = document.createElement("div");
-        column.className = "chart-day";
-
-        const value = document.createElement("span");
-        value.className = "chart-value";
-        value.textContent = day.minutes ? formatTime(day.minutes) : "";
-
-        const barArea = document.createElement("div");
-        barArea.className = "chart-bar-area";
-
-        const bar = document.createElement("div");
-        bar.className = "chart-bar";
-        bar.style.height = day.minutes
-            ? `${Math.max(5, (day.minutes / maximum) * 100)}%`
-            : "3px";
-        bar.title = `${day.date}: ${day.minutes} minutes`;
-
-        const label = document.createElement("span");
-        label.className = "chart-label";
-        label.textContent = day.label;
-
-        barArea.appendChild(bar);
-        column.append(value, barArea, label);
-        chart.appendChild(column);
-    });
-}
-
-function updateSubjectAnalytics(items) {
-    const container = $("subjectAnalytics");
-    container.innerHTML = "";
-
-    if (!items.length) {
-        container.innerHTML =
-            '<p class="empty-state">Complete a focus session linked to a subject to see your breakdown.</p>';
+    if (!Array.isArray(days) || days.length === 0) {
+        chart.innerHTML = '<p class="empty-state">No weekly data yet.</p>';
         return;
     }
 
-    const max = Math.max(1, ...items.map(item => item.minutes));
+    const maxMinutes = Math.max(
+        1,
+        ...days.map(day => Number(day.minutes || 0))
+    );
 
-    items.forEach(item => {
-        const row = document.createElement("div");
-        row.className = "subject-stat";
+    chart.innerHTML = days.map(day => {
+        const minutes = Number(day.minutes || 0);
+        const height = Math.max(4, (minutes / maxMinutes) * 100);
 
-        const heading = document.createElement("div");
-        heading.className = "subject-stat-heading";
-
-        const name = document.createElement("span");
-        name.textContent = item.name;
-
-        const time = document.createElement("strong");
-        time.textContent = formatTime(item.minutes);
-
-        heading.append(name, time);
-
-        const track = document.createElement("div");
-        track.className = "progress-track";
-
-        const fill = document.createElement("div");
-        fill.style.width = `${(item.minutes / max) * 100}%`;
-
-        track.appendChild(fill);
-        row.append(heading, track);
-        container.appendChild(row);
-    });
+        return `
+            <div class="chart-day">
+                <div class="chart-bar-container">
+                    <div class="chart-bar"
+                         style="height:${height}%"
+                         title="${minutes} minutes"></div>
+                </div>
+                <span>${escapeText(day.label || day.day || "")}</span>
+            </div>
+        `;
+    }).join("");
 }
 
-function updateTaskProgress(data) {
-    const total = data.total || 0;
-    const completed = data.completed || 0;
-    const percent = total ? (completed / total) * 100 : 0;
+function renderSubjectAnalytics(subjectData) {
+    const container = $("subjectAnalytics");
+    if (!container) return;
 
-    $("taskProgressBar").style.width = `${percent}%`;
-    $("taskProgressText").textContent = total
-        ? `${completed} completed · ${data.remaining} remaining · ${Math.round(percent)}% complete`
-        : "No tasks yet. Add a few tasks to track your progress.";
+    if (!Array.isArray(subjectData) || subjectData.length === 0) {
+        container.innerHTML = '<p class="empty-state">No subject data yet.</p>';
+        return;
+    }
+
+    container.innerHTML = subjectData.map(subject => `
+        <div class="analytics-row">
+            <span>${escapeText(subject.name || "Unknown subject")}</span>
+            <strong>${Number(subject.minutes || 0)} min</strong>
+        </div>
+    `).join("");
 }
 
-$("refreshStats").addEventListener("click", async () => {
+function renderTaskProgress(taskData) {
+    const bar = $("taskProgressBar");
+    const text = $("taskProgressText");
+
+    if (!bar || !text) return;
+
+    const completed = Number(
+        taskData.completed ?? taskData.done ?? 0
+    );
+
+    const total = Number(
+        taskData.total ?? taskData.count ?? 0
+    );
+
+    const percentage = total > 0
+        ? Math.min(100, Math.round((completed / total) * 100))
+        : 0;
+
+    bar.style.width = `${percentage}%`;
+    text.textContent = `${completed} / ${total} tasks completed`;
+}
+
+$("refreshStats")?.addEventListener("click", async () => {
     try {
         await refreshData();
         showToast("Statistics refreshed.");
     } catch (error) {
-        showToast(error.message, true);
+        showToast("Could not refresh statistics.", true);
     }
 });
 
+// ==============================
+// AI STUDY SIDEKICK
+// ==============================
 
-/* =========================
-   INITIALIZATION
-========================= */
+function scrollChatToBottom() {
+    const messages = $("chatMessages");
+    if (messages) messages.scrollTop = messages.scrollHeight;
+}
+
+function setChatStatus(message, isError = false) {
+    const status = $("chatStatus");
+    if (!status) return;
+
+    status.textContent = message;
+    status.classList.toggle("error", isError);
+}
+
+function setChatBusy(busy) {
+    chatBusy = busy;
+
+    const input = $("chatInput");
+    const send = $("chatSend");
+
+    if (input) input.disabled = busy;
+    if (send) {
+        send.disabled = busy;
+        const label = send.querySelector("span:first-child");
+        if (label) label.textContent = busy ? "Thinking..." : "Send";
+    }
+
+    if (busy) {
+        setChatStatus("Your study sidekick is thinking...");
+    } else {
+        setChatStatus("Ready");
+    }
+}
+
+function addChatMessage(role, content) {
+    const container = $("chatMessages");
+    if (!container) return;
+
+    const message = document.createElement("div");
+    message.className = `chat-message ${role === "user" ? "user-message" : "assistant-message"}`;
+
+    const label = document.createElement("span");
+    label.className = "message-label";
+    label.textContent = role === "user" ? "YOU" : "STUDY SIDEKICK";
+
+    const body = document.createElement("p");
+    body.className = "chat-message-content";
+
+    // textContent prevents model output from being interpreted as HTML.
+    body.textContent = content;
+
+    message.append(label, body);
+    container.appendChild(message);
+
+    scrollChatToBottom();
+    return message;
+}
+
+function showTypingIndicator() {
+    const container = $("chatMessages");
+    if (!container) return;
+
+    const indicator = document.createElement("div");
+    indicator.id = "chatTyping";
+    indicator.className = "chat-message assistant-message typing-indicator";
+    indicator.textContent = "Thinking...";
+    container.appendChild(indicator);
+
+    scrollChatToBottom();
+}
+
+function removeTypingIndicator() {
+    $("chatTyping")?.remove();
+}
+
+async function sendChatMessage(message) {
+    const text = String(message || "").trim();
+
+    if (!text || chatBusy) return;
+
+    const input = $("chatInput");
+
+    if (input) input.value = "";
+
+    addChatMessage("user", text);
+
+    const previousHistory = chatHistory.slice(-MAX_CHAT_HISTORY);
+
+    chatHistory.push({
+        role: "user",
+        content: text
+    });
+
+    setChatBusy(true);
+    showTypingIndicator();
+
+    try {
+        const result = await api("/api/chat", {
+            method: "POST",
+            body: {
+                message: text,
+                history: previousHistory
+            }
+        });
+
+        removeTypingIndicator();
+
+        const reply = String(
+            result.reply || result.response || result.message || ""
+        ).trim();
+
+        if (!reply) {
+            throw new Error("The AI returned an empty response.");
+        }
+
+        addChatMessage("assistant", reply);
+
+        chatHistory.push({
+            role: "model",
+            content: reply
+        });
+
+        chatHistory = chatHistory.slice(-MAX_CHAT_HISTORY);
+
+        setChatStatus("Ready");
+    } catch (error) {
+        removeTypingIndicator();
+
+        console.error("AI chat error:", error);
+
+        addChatMessage(
+            "assistant",
+            `I couldn't get a response. ${error.message || "Check that the Python server and Gemini API are configured correctly."}`
+        );
+
+        setChatStatus("Unable to connect to the AI.", true);
+    } finally {
+        setChatBusy(false);
+        if (input) input.focus();
+    }
+}
+
+$("chatForm")?.addEventListener("submit", event => {
+    event.preventDefault();
+    sendChatMessage($("chatInput")?.value || "");
+});
+
+$("chatInput")?.addEventListener("keydown", event => {
+    if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+
+        if (!$("chatForm")?.requestSubmit) {
+            sendChatMessage($("chatInput")?.value || "");
+        } else {
+            $("chatForm").requestSubmit();
+        }
+    }
+});
+
+$("chatSuggestions")?.addEventListener("click", event => {
+    const button = event.target.closest(".suggestion-button");
+    if (!button || chatBusy) return;
+
+    const prompt = button.dataset.prompt || button.textContent;
+    sendChatMessage(prompt);
+});
+
+$("clearChat")?.addEventListener("click", () => {
+    const messages = $("chatMessages");
+
+    if (messages) {
+        messages.replaceChildren();
+    }
+
+    chatHistory = [];
+
+    addChatMessage(
+        "assistant",
+        "Chat cleared. I'm ready to help you study, plan tasks, or explain a tricky concept."
+    );
+
+    setChatStatus("Ready");
+});
+
+// ==============================
+// TIMER BUTTONS
+// ==============================
+
+$("startButton")?.addEventListener("click", () => {
+    if (running) {
+        pauseTimer();
+
+        const button = $("startButton");
+        if (button) button.textContent = "Start";
+    } else {
+        startTimer();
+
+        const button = $("startButton");
+        if (button) button.textContent = "Pause";
+    }
+});
+
+$("resetButton")?.addEventListener("click", resetTimer);
+
+document.querySelectorAll(".mode[data-mode]").forEach(button => {
+    button.addEventListener("click", () => {
+        setMode(button.dataset.mode);
+    });
+});
+
+// ==============================
+// INITIALIZATION
+// ==============================
 
 async function initialize() {
     updateDisplay();
     updateStatus();
 
+    // Show a welcome message if the chat panel exists.
+    if ($("chatMessages") && !$("chatMessages").children.length) {
+        addChatMessage(
+            "assistant",
+            "I'm your study sidekick. Ask me to explain a concept, break a task into smaller steps, quiz you, or help plan your next study session."
+        );
+    }
+
     try {
         await refreshData();
     } catch (error) {
         updateConnectionStatus(false);
+
         showToast(
             "Cannot reach the Python server. Start it with: python server.py",
             true
         );
-        console.error(error);
+
+        console.error("Initialization failed:", error);
     }
 }
 
 initialize();
-

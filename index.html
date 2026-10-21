@@ -5,13 +5,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#ba4949">
-    <title>Pomodoro | Study Timer v2.0.0</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Pomodoro | Study Space v2.1.1</title>
+    <link rel="stylesheet" href="style.css?v=2.1.1">
 </head>
-<body>
+<body data-mode="focus">
     <main class="app">
         <header class="header">
-            <div class="version">STUDY SPACE · V2.0.0</div>
+            <div class="version">STUDY SPACE · V2.1.1</div>
             <h1>Pomodoro</h1>
             <p>Focus. Study. Repeat.</p>
         </header>
@@ -47,6 +47,7 @@
         <button class="tool-button" data-panel="tasksPanel" title="Subjects and tasks" aria-label="Subjects and tasks">T</button>
         <button class="tool-button" data-panel="statsPanel" title="Statistics" aria-label="Statistics">S</button>
         <button class="tool-button" data-panel="settingsPanel" title="Settings" aria-label="Settings">⚙</button>
+        <button class="tool-button ai-tool-button" data-panel="chatPanel" title="AI Study Sidekick" aria-label="AI Study Sidekick">AI</button>
     </aside>
 
     <div id="panelBackdrop" class="panel-backdrop"></div>
@@ -60,6 +61,7 @@
             </div>
             <button class="close-panel" aria-label="Close notes">×</button>
         </div>
+
         <p class="muted">Ideas, reminders, or things to revisit after this session.</p>
         <textarea id="notes" placeholder="Start writing…"></textarea>
         <button id="saveNotes" class="panel-primary">Save notes</button>
@@ -71,7 +73,7 @@
         <div class="panel-header">
             <div>
                 <span class="eyebrow">PLAN YOUR WORK</span>
-                <h2 id="tasksHeading">Subjects & tasks</h2>
+                <h2 id="tasksHeading">Subjects &amp; tasks</h2>
             </div>
             <button class="close-panel" aria-label="Close subjects and tasks">×</button>
         </div>
@@ -251,7 +253,75 @@
         </form>
     </section>
 
-    <script src="script.js"></script>
+    <!-- AI Sidekick -->
+    <section class="side-panel chat-panel" id="chatPanel" aria-labelledby="chatHeading">
+        <div class="panel-header">
+            <div>
+                <span class="eyebrow">YOUR STUDY COMPANION</span>
+                <h2 id="chatHeading">AI Sidekick</h2>
+            </div>
+            <button class="close-panel" aria-label="Close AI Sidekick">×</button>
+        </div>
+
+        <div class="ai-intro">
+            <div class="ai-avatar">AI</div>
+            <div>
+                <strong>Study Sidekick</strong>
+                <p>Powered by Gemini</p>
+            </div>
+            <span class="ai-status-dot" title="Assistant panel ready"></span>
+        </div>
+
+        <p class="muted chat-description">
+            Ask questions, simplify difficult concepts, practise problems,
+            or plan your next study session.
+        </p>
+
+        <div id="chatMessages" class="chat-messages" role="log"
+             aria-live="polite" aria-relevant="additions">
+            <div class="chat-message assistant-message">
+                <span class="message-label">SIDEKICK</span>
+                <p>Hey! What are we studying today? I can explain concepts,
+                quiz you, or help break a big task into smaller steps.</p>
+            </div>
+        </div>
+
+        <div class="chat-suggestions" id="chatSuggestions">
+            <button type="button" class="suggestion-button"
+                    data-prompt="Explain a difficult concept to me in simple terms.">
+                Explain a concept
+            </button>
+            <button type="button" class="suggestion-button"
+                    data-prompt="Quiz me on what I'm studying. Ask one question at a time.">
+                Quiz me
+            </button>
+            <button type="button" class="suggestion-button"
+                    data-prompt="Help me break my current study workload into manageable steps.">
+                Plan my study
+            </button>
+        </div>
+
+        <div id="chatStatus" class="chat-status" role="status" aria-live="polite"></div>
+
+        <form id="chatForm" class="chat-form">
+            <textarea id="chatInput" rows="2" maxlength="4000"
+                      placeholder="Message your Sidekick…"
+                      aria-label="Message the AI Sidekick" required></textarea>
+            <button id="chatSend" type="submit" class="chat-send-button"
+                    aria-label="Send message" title="Send message">
+                <span>Send</span>
+                <span aria-hidden="true">↑</span>
+            </button>
+        </form>
+
+        <div class="chat-footer">
+            <span>Enter to send · Shift + Enter for a new line</span>
+            <button id="clearChat" type="button">Clear chat</button>
+        </div>
+
+        <p class="chat-disclaimer">AI can make mistakes. Verify important information.</p>
+    </section>
+
+    <script src="script.js?v=2.1.1"></script>
 </body>
 </html>
-
