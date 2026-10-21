@@ -1,5 +1,6 @@
 
 import json
+import hmac
 import os
 import sqlite3
 from contextlib import contextmanager
@@ -8,15 +9,22 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
+from integration import IntegrationError, fetch_summary, service_url
+
 # ============================================================
 # CONFIGURATION
 # ============================================================
 
 BASE_DIR = Path(__file__).resolve().parent
-DB_FILE = BASE_DIR / "pomodoro.db"
+DB_FILE = Path(os.environ.get("POMODORO_DB", BASE_DIR / "pomodoro.db"))
 
 HOST = "127.0.0.1"
-PORT = int(os.environ.get("PORT", "8000"))
+PORT = int(os.environ.get("PORT", "5001"))
+AURACARDS_URL = os.environ.get("AURACARDS_URL", "http://127.0.0.1:5000")
+AURACARDS_API_URL = os.environ.get(
+    "AURACARDS_API_URL",
+    "http://127.0.0.1:5000"
+)
 
 GEMINI_MODEL = os.environ.get(
     "GEMINI_MODEL",
@@ -333,6 +341,22 @@ class PomodoroHandler(SimpleHTTPRequestHandler):
             "error": message,
         }, status)
 
+    def integration_authorized(self):
+        token = os.environ.get("STUDY_INTEGRATION_TOKEN", "")
+        if len(token) < 32:
+            self.api_error(
+                "The service integration is not configured.",
+                503
+            )
+            return False
+
+        supplied = self.headers.get("Authorization", "")
+        if not hmac.compare_digest(supplied, f"Bearer {token}"):
+            self.api_error("A valid integration token is required.", 401)
+            return False
+
+        return True
+
     # --------------------------------------------------------
     # AI STUDY SIDEKICK
     # --------------------------------------------------------
@@ -497,6 +521,50 @@ class PomodoroHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+
+        if path == "/api/integrations/config":
+            try:
+                self.send_json({
+                    "success": True,
+                    "auracards_url": service_url(AURACARDS_URL),
+                })
+            except IntegrationError as error:
+                self.api_error(str(error), 500)
+            return
+
+        if path == "/api/integrations/summary":
+            if not self.integration_authorized():
+                return
+
+            with database() as db:
+                stats = get_stats(db)
+                self.send_json({
+                    "success": True,
+                    "service": "pomodoro",
+                    "today": {
+                        "sessions": stats["today"]["sessions"],
+                        "minutes": stats["today"]["minutes"],
+                    },
+                    "all_time": {
+                        "sessions": stats["all_time"]["sessions"],
+                        "minutes": stats["all_time"]["minutes"],
+                    },
+                })
+            return
+
+        if path == "/api/integrations/auracards":
+            try:
+                summary = fetch_summary(
+                    AURACARDS_API_URL,
+                    os.environ.get("STUDY_INTEGRATION_TOKEN", ""),
+                    "auracards",
+                )
+            except IntegrationError as error:
+                self.api_error(str(error), 503)
+                return
+
+            self.send_json({"success": True, **summary})
+            return
 
         if path == "/api/data":
             with database() as db:

@@ -19,6 +19,9 @@ let deadline = null;
 let timerInterval = null;
 let running = false;
 let busyFinishing = false;
+let auraSession = null;
+let auraSessionStatus = null;
+let auraSessionReady = false;
 
 let subjects = [];
 let tasks = [];
@@ -36,6 +39,202 @@ const MAX_CHAT_HISTORY = 10;
 // ==============================
 
 const $ = id => document.getElementById(id);
+
+function normalizeAuraApi(value) {
+    const url = new URL(value);
+    const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+
+    if (
+        url.username ||
+        url.password ||
+        !(url.protocol === "https:" || (url.protocol === "http:" && loopback))
+    ) {
+        throw new Error("The Aura Cards API URL must use HTTPS, except on localhost.");
+    }
+
+    url.search = "";
+    url.hash = "";
+    return url.toString().replace(/\/$/, "");
+}
+
+function readAuraSession() {
+    const query = new URLSearchParams(location.search);
+    const fragment = new URLSearchParams(location.hash.slice(1));
+    let sessionId = fragment.get("aura_session");
+    let token = fragment.get("aura_token");
+    let apiBase = fragment.get("aura_api");
+
+    if (!sessionId) {
+        try {
+            sessionId = sessionStorage.getItem("aura-current-timer");
+        } catch {
+            sessionId = null;
+        }
+    }
+
+    if (sessionId && token && apiBase) {
+        try {
+            apiBase = normalizeAuraApi(apiBase);
+            auraSession = { sessionId, token, apiBase };
+            sessionStorage.setItem(
+                `aura-timer-${sessionId}`,
+                JSON.stringify(auraSession)
+            );
+            sessionStorage.setItem("aura-current-timer", sessionId);
+        } catch (error) {
+            if (error instanceof TypeError) {
+                showToast("Could not preserve the Aura Cards session in this tab.", true);
+            } else {
+                showToast(error.message, true);
+            }
+            auraSession = null;
+        }
+
+        for (const key of ["aura_session", "aura_token", "aura_api"]) {
+            fragment.delete(key);
+        }
+        history.replaceState(
+            null,
+            "",
+            location.pathname + location.search +
+                (fragment.toString() ? `#${fragment}` : "")
+        );
+    } else if (sessionId) {
+        try {
+            const cached = JSON.parse(
+                sessionStorage.getItem(`aura-timer-${sessionId}`)
+            );
+            if (cached?.sessionId === sessionId && cached.token) {
+                auraSession = {
+                    sessionId,
+                    token: cached.token,
+                    apiBase: normalizeAuraApi(cached.apiBase)
+                };
+            }
+        } catch {
+            auraSession = null;
+        }
+    }
+
+    if (!auraSession) return null;
+
+    const duration = Number(query.get("duration"));
+    if (Number.isInteger(duration) && duration >= 1 && duration <= 120) {
+        remainingSeconds = duration * 60;
+    }
+
+    const returnLink = $("auraReturnLink");
+    if (returnLink) {
+        try {
+            const candidate = new URL(
+                query.get("return_url") || "/",
+                new URL(auraSession.apiBase).origin
+            );
+            if (
+                candidate.origin === new URL(auraSession.apiBase).origin &&
+                !candidate.username &&
+                !candidate.password
+            ) {
+                returnLink.href = candidate.toString();
+            }
+        } catch {
+            returnLink.href = auraSession.apiBase;
+        }
+        returnLink.hidden = false;
+    }
+
+    const modes = document.querySelector(".modes");
+    const roundDisplay = document.querySelector(".round");
+    if (modes) modes.hidden = true;
+    if (roundDisplay) roundDisplay.hidden = true;
+    if ($("resetButton")) $("resetButton").textContent = "Cancel Aura session";
+    return auraSession;
+}
+
+async function auraRequest(action) {
+    if (!auraSession) throw new Error("No Aura Cards session is connected.");
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const options = {
+        method: action ? "POST" : "GET",
+        headers: {
+            Authorization: `Bearer ${auraSession.token}`,
+            ...(action ? { "Content-Type": "application/json" } : {})
+        },
+        credentials: "omit",
+        signal: controller.signal
+    };
+
+    if (action) options.body = JSON.stringify({ action });
+
+    try {
+        const response = await fetch(
+            `${auraSession.apiBase}/api/focus-sessions/${encodeURIComponent(auraSession.sessionId)}`,
+            options
+        );
+        let result;
+        try {
+            result = await response.json();
+        } catch {
+            throw new Error("Aura Cards returned an invalid response.");
+        }
+        if (!response.ok) {
+            const error = new Error(result.error || "Aura Cards session request failed.");
+            error.code = result.code;
+            throw error;
+        }
+        if (
+            !result ||
+            !["pending", "running", "paused", "completed", "cancelled"].includes(result.status) ||
+            !Number.isFinite(result.remaining_seconds)
+        ) {
+            throw new Error("Aura Cards returned invalid session data.");
+        }
+        return result;
+    } catch (error) {
+        if (error.name === "AbortError") {
+            throw new Error("Aura Cards timed out. Reconnect before continuing.");
+        }
+        if (error instanceof TypeError) {
+            throw new Error("Aura Cards is unavailable. Reconnect before continuing.");
+        }
+        throw error;
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+function applyAuraState(state) {
+    auraSessionStatus = state.status;
+    remainingSeconds = Math.max(0, Math.ceil(state.remaining_seconds));
+    running = false;
+    deadline = null;
+    stopInterval();
+    auraSessionReady = true;
+
+    if (state.status === "running") {
+        startTimer();
+    } else {
+        updateDisplay();
+        updateStatus();
+    }
+
+    const startButton = $("startButton");
+    const resetButton = $("resetButton");
+    if (startButton) {
+        startButton.disabled = ["completed", "cancelled"].includes(state.status);
+        if (state.status === "completed") startButton.textContent = "Completed";
+        if (state.status === "cancelled") startButton.textContent = "Cancelled";
+    }
+    if (resetButton) {
+        resetButton.disabled = ["completed", "cancelled"].includes(state.status);
+    }
+}
+
+async function refreshAuraState() {
+    applyAuraState(await auraRequest());
+}
 
 async function api(path, options = {}) {
     const requestOptions = {
@@ -215,6 +414,15 @@ function updateStatus() {
     const status = $("status");
     if (!status) return;
 
+    if (auraSession && auraSessionStatus === "completed") {
+        status.textContent = "Aura Cards session complete.";
+        return;
+    }
+    if (auraSession && auraSessionStatus === "cancelled") {
+        status.textContent = "Aura Cards session cancelled.";
+        return;
+    }
+
     const labels = {
         focus: running ? "Focus session in progress." : "Time to focus.",
         shortBreak: running ? "Short break in progress." : "Take a short break.",
@@ -284,6 +492,11 @@ function pauseTimer() {
 }
 
 function resetTimer() {
+    if (auraSession) {
+        cancelAuraSession();
+        return;
+    }
+
     pauseTimer();
 
     remainingSeconds = durationFor();
@@ -293,6 +506,8 @@ function resetTimer() {
 }
 
 function setMode(mode) {
+    if (auraSession) return;
+
     const allowedModes = ["focus", "shortBreak", "longBreak"];
     if (!allowedModes.includes(mode)) return;
 
@@ -303,6 +518,51 @@ function setMode(mode) {
 
     updateDisplay();
     updateStatus();
+}
+
+async function cancelAuraSession() {
+    if (!auraSession || !auraSessionReady || busyFinishing) return;
+
+    const button = $("resetButton");
+    if (button) button.disabled = true;
+
+    try {
+        applyAuraState(await auraRequest("cancel"));
+        showToast("Aura Cards session cancelled.");
+    } catch (error) {
+        showToast(error.message || "Could not cancel the Aura Cards session.", true);
+    } finally {
+        if (button && !["completed", "cancelled"].includes(auraSessionStatus)) {
+            button.disabled = false;
+        }
+    }
+}
+
+async function toggleAuraSession() {
+    if (!auraSession) {
+        if (running) {
+            pauseTimer();
+        } else {
+            startTimer();
+        }
+        return;
+    }
+
+    if (!auraSessionReady || busyFinishing) return;
+
+    const button = $("startButton");
+    if (button) button.disabled = true;
+
+    try {
+        const action = running ? "pause" : "start";
+        applyAuraState(await auraRequest(action));
+    } catch (error) {
+        showToast(error.message || "Could not update the Aura Cards session.", true);
+    } finally {
+        if (button && !["completed", "cancelled"].includes(auraSessionStatus)) {
+            button.disabled = false;
+        }
+    }
 }
 
 async function finishSession() {
@@ -318,6 +578,12 @@ async function finishSession() {
 
     try {
         if (completedMode === "focus") {
+            if (auraSession) {
+                applyAuraState(await auraRequest("complete"));
+                showToast("Aura Cards session completed.");
+                return;
+            }
+
             await api("/api/session", {
                 method: "POST",
                 body: {
@@ -343,6 +609,16 @@ async function finishSession() {
         await refreshData();
     } catch (error) {
         console.error("Could not save session:", error);
+        if (auraSession) {
+            try {
+                await refreshAuraState();
+            } catch (refreshError) {
+                console.error("Could not refresh Aura Cards session:", refreshError);
+            }
+            showToast(error.message || "Could not complete the Aura Cards session.", true);
+            return;
+        }
+
         showToast("Session finished, but saving failed.", true);
 
         if (completedMode === "focus") {
@@ -361,8 +637,10 @@ async function finishSession() {
         updateStatus();
 
         const shouldAutoStart =
+            !auraSession && (
             (currentMode !== "focus" && settings.autoStartBreaks) ||
-            (currentMode === "focus" && settings.autoStartFocus);
+            (currentMode === "focus" && settings.autoStartFocus)
+            );
 
         if (shouldAutoStart) {
             startTimer();
@@ -381,13 +659,19 @@ function openPanel(id) {
     if (!panel) return;
 
     panel.classList.add("open");
+    panel.setAttribute("aria-hidden", "false");
 
     const backdrop = $("panelBackdrop");
     if (backdrop) backdrop.classList.add("visible");
 
     document.querySelectorAll("[data-panel]").forEach(button => {
         button.classList.toggle("active", button.dataset.panel === id);
+        if (button.id === "auraCardsButton") {
+            button.setAttribute("aria-expanded", String(button.dataset.panel === id));
+        }
     });
+
+    if (id === "auraPanel") loadAuraPanel();
 
     if (id === "statsPanel") {
         refreshData().catch(error => {
@@ -408,6 +692,7 @@ function openPanel(id) {
 function closePanels() {
     document.querySelectorAll(".side-panel").forEach(panel => {
         panel.classList.remove("open");
+        panel.setAttribute("aria-hidden", "true");
     });
 
     const backdrop = $("panelBackdrop");
@@ -415,7 +700,41 @@ function closePanels() {
 
     document.querySelectorAll("[data-panel]").forEach(button => {
         button.classList.remove("active");
+        if (button.id === "auraCardsButton") {
+            button.setAttribute("aria-expanded", "false");
+        }
     });
+}
+
+async function loadAuraPanel() {
+    const frame = $("auraCardsFrame");
+    const status = $("auraPanelStatus");
+    if (!frame || frame.dataset.loaded === "true") return;
+
+    if (status) {
+        status.hidden = false;
+        status.textContent = "Connecting to Aura Cards…";
+    }
+
+    try {
+        const config = await api("/api/integrations/config");
+        const url = new URL(config.auracards_url);
+        const externalLink = $("auraCardsOpenExternal");
+        if (externalLink) externalLink.href = url.href;
+        if (url.origin === location.origin) {
+            throw new Error("Aura Cards must use a separate origin to open in the side panel.");
+        }
+        frame.src = url.href;
+        frame.dataset.loaded = "true";
+        if (externalLink) externalLink.href = url.href;
+        if (status) status.hidden = true;
+    } catch (error) {
+        if (status) {
+            status.hidden = false;
+            status.textContent = error.message || "Could not connect to Aura Cards.";
+        }
+        showToast(error.message || "Could not connect to Aura Cards.", true);
+    }
 }
 
 document.querySelectorAll("[data-panel]").forEach(button => {
@@ -886,6 +1205,34 @@ $("refreshStats")?.addEventListener("click", async () => {
     }
 });
 
+$("refreshAuraStats")?.addEventListener("click", async () => {
+    const output = $("auraProgress");
+    if (output) output.textContent = "Connecting to Aura Cards…";
+
+    try {
+        const summary = await api("/api/integrations/auracards");
+        if (
+            summary.service !== "auracards" ||
+            !Number.isInteger(summary.completed_sessions) ||
+            !Number.isInteger(summary.total_minutes)
+        ) {
+            throw new Error("Aura Cards returned invalid summary data.");
+        }
+
+        const sessions = summary.completed_sessions;
+        const minutes = summary.total_minutes;
+        if (output) {
+            output.textContent =
+                `${sessions} completed focus ${sessions === 1 ? "session" : "sessions"} · ${minutes} minutes total.`;
+        }
+    } catch (error) {
+        if (output) {
+            output.textContent = error.message || "Could not load Aura Cards progress.";
+        }
+        showToast(error.message || "Could not load Aura Cards progress.", true);
+    }
+});
+
 // ==============================
 // AI STUDY SIDEKICK
 // ==============================
@@ -1078,17 +1425,7 @@ $("clearChat")?.addEventListener("click", () => {
 // ==============================
 
 $("startButton")?.addEventListener("click", () => {
-    if (running) {
-        pauseTimer();
-
-        const button = $("startButton");
-        if (button) button.textContent = "Start";
-    } else {
-        startTimer();
-
-        const button = $("startButton");
-        if (button) button.textContent = "Pause";
-    }
+    toggleAuraSession();
 });
 
 $("resetButton")?.addEventListener("click", resetTimer);
@@ -1104,6 +1441,7 @@ document.querySelectorAll(".mode[data-mode]").forEach(button => {
 // ==============================
 
 async function initialize() {
+    const linkedSession = readAuraSession();
     updateDisplay();
     updateStatus();
 
@@ -1126,6 +1464,16 @@ async function initialize() {
         );
 
         console.error("Initialization failed:", error);
+    }
+
+    if (linkedSession) {
+        const startButton = $("startButton");
+        if (startButton) startButton.disabled = true;
+        try {
+            await refreshAuraState();
+        } catch (error) {
+            showToast(error.message || "Could not connect to the Aura Cards session.", true);
+        }
     }
 }
 

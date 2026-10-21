@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Aura Cards — turn your study materials into focused flashcard sessions.">
+  <meta name="theme-color" content="#0b0b0e">
+  <title>Aura Cards</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 50 50'%3E%3Crect width='50' height='50' rx='14' fill='%23121119'/%3E%3Cpath d='M13 34 25 12l12 22M18 27h14' fill='none' stroke='%23d8be83' stroke-width='3'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css"><script src="app.js" defer></script>
+</head>
+<body>
+<div class="app-shell">
+  <div class="main-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Aura Cards home">Aura Cards</a>
+      <nav aria-label="Main navigation"><button data-view="overview" class="nav-item active">Overview</button><button data-view="decks" class="nav-item">Decks</button><button data-view="study" class="nav-item">Study</button><button data-view="starred" class="nav-item">Starred</button></nav>
+      <div class="top-actions"><button id="sidebarFocus" class="icon-btn" aria-label="Open Pomodoro timer" title="Pomodoro timer"><span data-icon="clock"></span></button><button data-view="settings" class="icon-btn" aria-label="Appearance and settings" title="Settings"><span data-icon="settings"></span></button><button id="quickTheme" class="icon-btn" aria-label="Switch light and dark theme" title="Switch theme"><span data-icon="sun"></span></button><button id="uploadTop" class="btn btn-gold btn-small">Upload notes</button></div>
+    </header>
+    <main id="mainContent" tabindex="-1"></main>
+    <footer>Saved on this device<span>PDF · DOCX · PPTX</span></footer>
+  </div>
+</div>
+<dialog id="uploadDialog" class="modal"><form id="uploadForm"><div class="modal-heading"><h2>Upload notes</h2><button type="button" class="icon-btn" data-close aria-label="Close">×</button></div><label id="dropZone" class="drop-zone" tabindex="0"><span class="upload-symbol" data-icon="upload"></span><strong id="fileLabel">Choose file</strong><span>PDF · DOCX · PPTX · 20 MB max</span><input id="fileInput" type="file" accept=".pdf,.docx,.pptx" hidden></label><div class="form-grid"><label>Deck name<input name="name" id="uploadName" maxlength="100" required placeholder="e.g. Chapter 4"></label><label>Category<select id="uploadCategory"></select></label><label>Number of cards<select id="uploadCount"><option>10</option><option selected>20</option><option>30</option><option>50</option></select></label><label>Difficulty<select id="uploadDifficulty"><option value="mixed">Mixed</option><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select></label></div><label class="generator-control">Generation<select id="uploadEngine"><option value="extractive">Offline · lightweight</option><option value="cloud">Cloud AI · API key</option><option value="ollama">Local AI · Ollama</option></select></label><div id="cloudNotice" hidden><label class="check-line"><input id="cloudConsent" type="checkbox"><span>Send this document’s text to OpenAI. API charges may apply.</span></label><p class="helper" id="cloudSetup"></p></div><details class="generation-options"><summary>Card options</summary><label class="format-control">Document format<select id="uploadFormat"><option value="auto">Auto-detect</option><option value="qa">Questions &amp; answers</option><option value="topics">Topics &amp; explanations</option><option value="prose">General prose</option></select></label><div class="form-grid"><label>Card style<select id="uploadStyle"><option value="mixed">Mixed</option><option value="qa">Question &amp; answer</option><option value="cloze">Fill in the blank</option></select></label><label>Focus<input id="uploadFocus" maxlength="160" placeholder="Optional topic"></label></div></details><p id="uploadStatus" class="form-status" role="status"></p><progress id="uploadProgress" hidden></progress><div class="modal-footer"><button type="button" class="btn btn-ghost" data-close>Cancel</button><button type="submit" id="generateBtn" class="btn btn-gold">Generate cards</button></div></form></dialog>
+<dialog id="reviewDialog" class="modal review-modal" aria-labelledby="reviewTitle">
+ <form id="reviewForm"><div class="modal-heading"><h2 id="reviewTitle">Review cards</h2><button type="button" class="icon-btn" data-close aria-label="Close review">×</button></div>
+ <p id="reviewCount" class="helper" aria-live="polite"></p><details id="reviewWarnings" class="generation-note" hidden><summary>Generation notes</summary><p></p></details>
+ <div id="draftCards" class="draft-cards"></div><p id="reviewStatus" class="form-status error" role="status"></p>
+ <div class="modal-footer"><button type="button" id="reviewBack" class="btn btn-ghost">Back</button><button type="submit" id="saveDraftBtn" class="btn btn-gold">Add cards</button></div></form>
+</dialog>
+<dialog id="editorDialog" class="modal"><form id="editorForm"><div class="modal-heading"><h2 id="editorTitle">New deck</h2><button type="button" class="icon-btn" data-close aria-label="Close">×</button></div><div id="editorFields"></div><div class="modal-footer"><button type="button" class="btn btn-ghost" data-close>Cancel</button><button type="submit" class="btn btn-gold">Save changes</button></div></form></dialog>
+<dialog id="confirmDialog" class="modal compact"><div class="modal-heading"><h2>Delete this item?</h2><button class="icon-btn" data-close aria-label="Close">×</button></div><p id="confirmText"></p><div class="modal-footer"><button class="btn btn-ghost" data-close>Keep it</button><button id="confirmDelete" class="btn btn-danger">Delete</button></div></dialog>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

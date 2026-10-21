@@ -5,13 +5,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#ba4949">
-    <title>Pomodoro | Study Space v2.1.1</title>
-    <link rel="stylesheet" href="style.css?v=2.1.1">
+    <title>Pomodoro | Study Space v2.2.0</title>
+    <link rel="stylesheet" href="style.css?v=2.2.1">
 </head>
 <body data-mode="focus">
     <main class="app">
         <header class="header">
-            <div class="version">STUDY SPACE · V2.1.1</div>
+            <div class="version">STUDY SPACE · V2.2.0</div>
             <h1>Pomodoro</h1>
             <p>Focus. Study. Repeat.</p>
         </header>
@@ -36,6 +36,7 @@
             <button id="startButton" class="primary-button">START</button>
             <div class="round">Focus round <span id="round">1</span> of 4</div>
             <button id="resetButton" class="reset-button">Reset timer</button>
+            <a id="auraReturnLink" class="aura-return-link" hidden>Return to Aura Cards</a>
         </section>
 
         <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -48,6 +49,9 @@
         <button class="tool-button" data-panel="statsPanel" title="Statistics" aria-label="Statistics">S</button>
         <button class="tool-button" data-panel="settingsPanel" title="Settings" aria-label="Settings">⚙</button>
         <button class="tool-button ai-tool-button" data-panel="chatPanel" title="AI Study Sidekick" aria-label="AI Study Sidekick">AI</button>
+        <button id="auraCardsButton" class="tool-button integration-link"
+                data-panel="auraPanel" aria-controls="auraPanel" aria-expanded="false"
+                title="Open Aura Cards panel" aria-label="Open Aura Cards">AC</button>
     </aside>
 
     <div id="panelBackdrop" class="panel-backdrop"></div>
@@ -190,6 +194,11 @@
                 </div>
             </div>
         </div>
+        <div class="stats-section">
+            <h3>Aura Cards</h3>
+            <p id="auraProgress" class="muted">Load summary from the connected Aura Cards service.</p>
+            <button id="refreshAuraStats" class="secondary-button">Refresh Aura Cards progress</button>
+        </div>
         <button id="refreshStats" class="secondary-button">Refresh statistics</button>
     </section>
 
@@ -322,6 +331,26 @@
         <p class="chat-disclaimer">AI can make mistakes. Verify important information.</p>
     </section>
 
-    <script src="script.js?v=2.1.1"></script>
+    <!-- Aura Cards -->
+    <section class="side-panel aura-panel" id="auraPanel" role="dialog"
+             aria-modal="true" aria-hidden="true" aria-labelledby="auraHeading">
+        <div class="panel-header">
+            <div>
+                <span class="eyebrow">YOUR STUDY WORKSPACE</span>
+                <h2 id="auraHeading">Aura Cards</h2>
+            </div>
+            <div class="aura-panel-actions">
+                <a id="auraCardsOpenExternal" class="aura-external-link"
+                   href="#" target="_blank" rel="noopener noreferrer">Open in new tab</a>
+                <button class="close-panel" aria-label="Close Aura Cards">×</button>
+            </div>
+        </div>
+        <p id="auraPanelStatus" class="aura-panel-status" role="status" hidden></p>
+        <iframe id="auraCardsFrame" title="Aura Cards study workspace"
+                loading="lazy" referrerpolicy="no-referrer"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-downloads allow-popups allow-popups-to-escape-sandbox"></iframe>
+    </section>
+
+    <script src="script.js?v=2.2.1"></script>
 </body>
 </html>

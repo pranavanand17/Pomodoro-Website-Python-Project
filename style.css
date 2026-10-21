@@ -341,6 +341,7 @@ button:disabled {
     box-shadow: 0 3px 10px #00000012;
     transition: background 150ms ease, color 150ms ease,
                 border-color 150ms ease, transform 150ms ease;
+    text-decoration: none;
 }
 
 .tool-button:hover {
@@ -359,6 +360,74 @@ button:disabled {
 .ai-tool-button:hover {
     border-color: #a78abb;
     background: #584367;
+}
+
+.integration-link {
+    border-color: #4d7365;
+    background: #294137;
+    color: #bce0ce;
+}
+
+.integration-link:hover {
+    border-color: #77a58e;
+    background: #355444;
+}
+
+.aura-panel {
+    width: min(1100px, calc(100vw - 72px));
+    gap: 12px;
+    padding: 16px;
+}
+
+.aura-panel .panel-header {
+    flex: 0 0 auto;
+    padding-bottom: 12px;
+}
+
+.aura-panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.aura-external-link {
+    color: #bce0ce;
+    font-size: 12px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.aura-external-link:hover {
+    color: white;
+}
+
+.aura-panel-status {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.aura-panel iframe {
+    display: block;
+    width: 100%;
+    min-height: 0;
+    flex: 1;
+    border: 0;
+    border-radius: 8px;
+    background: #161616;
+}
+
+.aura-return-link {
+    display: block;
+    margin-top: 11px;
+    color: #ffffffd9;
+    font-size: 12px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.aura-return-link[hidden] {
+    display: none;
 }
 
 /* Panel backdrop */
@@ -1172,6 +1241,22 @@ button:disabled {
 
     .chat-panel {
         height: min(92dvh, 850px);
+    }
+
+    .aura-panel {
+        width: 100%;
+        height: 100dvh;
+        max-height: 100dvh;
+        padding: 16px 12px max(12px, env(safe-area-inset-bottom));
+        border-radius: 0;
+    }
+
+    .aura-panel .panel-header h2 {
+        font-size: 21px;
+    }
+
+    .aura-panel-actions {
+        gap: 9px;
     }
 
     .toast {

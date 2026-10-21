@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b0b0e"><title>Focus · Aura Cards</title>
+  <link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="pomodoro.css">
+  <script src="pomodoro.js" defer></script>
+</head>
+<body>
+  <div class="timer-shell">
+    <header class="timer-header"><a id="returnLink" class="brand" href="/">Aura Cards</a><span>Focus</span></header>
+    <main class="timer-main">
+      <p id="deckContext" class="timer-context">Focus session</p>
+      <div class="timer-dial"><span id="timerClock" role="timer" aria-label="Time remaining">25:00</span><span id="timerState">Ready</span></div>
+      <div class="timer-actions"><button id="timerToggle" class="btn btn-gold" type="button">Start</button><button id="timerCancel" class="btn btn-ghost" type="button">Cancel</button></div>
+      <p id="timerMessage" class="form-status" role="status" aria-live="polite"></p>
+      <a id="backToCards" class="text-link timer-back" href="/">Back to cards</a>
+    </main>
+  </div>
+</body>
+</html>
