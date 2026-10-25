@@ -1,8 +1,31 @@
 @echo off
-cd /d "%~dp0.."
-if not exist "start_pair.py" (
-  echo Extract the complete AuraCards_Pomodoro_Connected ZIP first.
-  pause
-  exit /b 1
+setlocal
+set "ROOT=%~dp0"
+set "AURA=%ROOT%Auracards-main\Auracards-main"
+
+if not exist "%AURA%\.venv\Scripts\python.exe" (
+    echo Aura Cards dependencies are not installed.
+    echo Create its virtual environment and install Auracards-main\Auracards-main\requirements.txt first.
+    exit /b 1
 )
-py start_pair.py
+
+for /f "usebackq delims=" %%T in (`python -c "import secrets; print(secrets.token_urlsafe(32))"`) do set "STUDY_INTEGRATION_TOKEN=%%T"
+if not defined STUDY_INTEGRATION_TOKEN (
+    echo Could not create a shared integration token. Check that Python is installed.
+    exit /b 1
+)
+
+set "PORT=8000"
+set "HOST=127.0.0.1"
+set "POMODORO_URL=http://127.0.0.1:8000"
+set "POMODORO_API_URL=http://127.0.0.1:8000"
+set "AURACARDS_URL=http://127.0.0.1:5001"
+set "AURACARDS_API_URL=http://127.0.0.1:5001"
+set "AURA_FRAME_ORIGINS=http://127.0.0.1:8000"
+
+start "Pomodoro" cmd /k "cd /d ""%ROOT%"" && python server.py"
+start "Aura Cards" cmd /k "cd /d ""%AURA%"" && .venv\Scripts\python.exe app.py --port 5001"
+
+echo Pomodoro:  http://127.0.0.1:8000
+echo Aura Cards: http://127.0.0.1:5001
+echo Close each server window to stop that application.

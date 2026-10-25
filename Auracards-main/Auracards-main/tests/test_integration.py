@@ -18,7 +18,7 @@ POMODORO_ROOT = PROJECT_ROOT.parents[1]
 sys.path.insert(0, str(POMODORO_ROOT))
 
 import server as pomodoro
-from app import create_app
+from app import create_app, get_bind_host as aura_bind_host
 
 
 TOKEN = "integration-test-token-" + ("x" * 40)
@@ -147,6 +147,17 @@ class BidirectionalIntegrationTests(unittest.TestCase):
         status, payload = self.request_json(self.pomodoro_url + "/api/health")
         self.assertEqual(status, 200)
         self.assertEqual(payload, {"status": "ok", "service": "pomodoro"})
+
+    def test_bind_hosts_use_render_interface(self):
+        with patch.dict(
+            os.environ,
+            {
+                "RENDER_EXTERNAL_HOSTNAME": "pomodoro.onrender.com",
+                "HOST": "127.0.0.1",
+            },
+        ):
+            self.assertEqual(pomodoro.get_bind_host(), "0.0.0.0")
+            self.assertEqual(aura_bind_host(), "0.0.0.0")
 
     def test_each_service_requests_the_other_service_summary(self):
         status, pomodoro_summary = self.request_json(

@@ -1,18 +1,20 @@
-# Modern AuraCards compatibility (no Pomodoro redesign)
+# Modern Aura Cards compatibility
 
-The original Pomodoro `index.html` layout, `style.css`, `script.js`, and data
-remain as uploaded. A second script `aura-sync.js` connects the timer to the
-local `/api/timer` server route, which modern Aura's Focus Companion consumes.
-`local_bridge.py` forwards deck snapshots via Aura's `/api/integration/decks`.
+The original Pomodoro interface remains in place. `aura-sync.js` connects its
+timer controls to Pomodoro's `/api/timer` route so a compatible Aura focus
+companion can share the same persisted timer state. The existing Aura
+focus-session handoff and summary integration continue to work separately.
 
-The older Aura focus-session handoff and authenticated statistics requests
-are supported; use the updated `Auracards-main` from this same release.
+## Local setup
 
-To start both together, extract the full AuraCards_Pomodoro_Connected ZIP and
-run `python3 start_pair.py` from its root after installing Aura dependencies.
+Use the Aura Cards source included in this repository. Follow the root
+README's dependency setup, then run `.\start_both.bat` on Windows.
 
-## Current local ports
+The local services use these ports:
 
-AuraCards: `http://127.0.0.1:5001`  
-Pomodoro: `http://127.0.0.1:8000`  
-Start both from the bundle root with `python3 start_pair.py`. Port 5000 is not used.
+- Aura Cards: `http://127.0.0.1:5001`
+- Pomodoro: `http://127.0.0.1:8000`
+
+The timer API is same-origin only. It recognizes Render's HTTPS service
+hostname when deployed; other integration requests still use the configured
+service URLs and shared integration token.

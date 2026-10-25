@@ -8,14 +8,34 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 
+from server import timer_request_is_same_origin
+
 PROJECT = Path(__file__).resolve().parents[1]
 
 class ApiCompatibilityTests(unittest.TestCase):
+    def test_timer_api_allows_local_and_render_same_origin_only(self):
+        with patch.dict(os.environ, {'RENDER_EXTERNAL_HOSTNAME':''}):
+            self.assertTrue(timer_request_is_same_origin(
+                '127.0.0.1:8000', 'http://127.0.0.1:8000', 'same-origin', 8000))
+            self.assertFalse(timer_request_is_same_origin(
+                '127.0.0.1:8001', 'http://127.0.0.1:8001', 'same-origin', 8000))
+
+        with patch.dict(os.environ, {'RENDER_EXTERNAL_HOSTNAME':'pomodoro.onrender.com'}):
+            self.assertTrue(timer_request_is_same_origin(
+                'pomodoro.onrender.com', 'https://pomodoro.onrender.com', 'same-origin', 8000))
+            self.assertFalse(timer_request_is_same_origin(
+                'pomodoro.onrender.com', 'http://pomodoro.onrender.com', 'same-origin', 8000))
+            self.assertFalse(timer_request_is_same_origin(
+                'evil.onrender.com', 'https://evil.onrender.com', 'same-origin', 8000))
+            self.assertFalse(timer_request_is_same_origin(
+                'pomodoro.onrender.com', 'https://pomodoro.onrender.com', 'cross-site', 8000))
+
     @classmethod
     def setUpClass(cls):
         import socket

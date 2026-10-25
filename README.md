@@ -1,5 +1,3 @@
-
-
 # Pomodoro + Aura Cards
 
 This folder contains two separate applications. Pomodoro is a Python
@@ -17,12 +15,12 @@ python -m pip install -r requirements.txt
 Install Aura Cards into its own virtual environment:
 
 ```powershell
-python -m venv ..\Auracards-main\.venv
-..\Auracards-main\.venv\Scripts\python.exe -m pip install -r ..\Auracards-main\requirements.txt
+python -m venv Auracards-main\Auracards-main\.venv
+Auracards-main\Auracards-main\.venv\Scripts\python.exe -m pip install -r Auracards-main\Auracards-main\requirements.txt
 ```
 
 No Node.js build step is needed: Aura Cards serves its existing frontend from
-`..\Auracards-main\dist`.
+`Auracards-main\Auracards-main\dist`.
 
 ## Start both on Windows
 
@@ -47,7 +45,7 @@ python server.py
 ```
 
 ```powershell
-Set-Location ..\Auracards-main
+Set-Location Auracards-main\Auracards-main
 .venv\Scripts\python.exe app.py --port 5001
 ```
 
@@ -69,6 +67,11 @@ session-specific Aura capability. Start, pause, resume, and completion are
 sent directly to Aura's existing focus-session API. Pomodoro's **Aura Cards
 progress** in Statistics fetches Aura's aggregate focus summary. Aura's
 overview can fetch Pomodoro's daily and all-time totals.
+
+The Pomodoro page also loads `aura-sync.js`, which keeps its timer state in
+Pomodoro's SQLite database so compatible Aura focus companions can share the
+same timer. Its `/api/timer` endpoint accepts only same-origin browser
+requests; on Render, it recognizes the service's HTTPS hostname.
 
 ## Integration APIs
 

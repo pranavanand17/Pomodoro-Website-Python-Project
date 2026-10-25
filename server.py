@@ -20,7 +20,41 @@ from local_bridge import peer_call
 BASE_DIR = Path(__file__).resolve().parent
 DB_FILE = Path(os.environ.get("POMODORO_DB", BASE_DIR / "pomodoro.db"))
 
-HOST = os.environ.get("HOST", "127.0.0.1")
+
+def get_bind_host():
+    if os.environ.get("RENDER_EXTERNAL_HOSTNAME"):
+        return "0.0.0.0"
+    return os.environ.get("HOST", "127.0.0.1")
+
+
+def timer_request_is_same_origin(host, origin, fetch_site, server_port):
+    if fetch_site == "cross-site":
+        return False
+
+    try:
+        parsed = urlparse("//" + host)
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError:
+        return False
+
+    if not hostname or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:
+        return False
+
+    render_hostname = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
+    if render_hostname:
+        if hostname.lower() != render_hostname.lower() or port not in (None, 443):
+            return False
+        expected_origin = "https://" + host
+    else:
+        if hostname.lower() not in ("localhost", "127.0.0.1", "::1") or port != server_port:
+            return False
+        expected_origin = "http://" + host
+
+    return not origin or origin.lower() == expected_origin.lower()
+
+
+HOST = get_bind_host()
 PORT = int(os.environ.get("PORT", "8000"))
 AURACARDS_URL = os.environ.get("AURACARDS_URL", os.environ.get("AURA_URL", "http://127.0.0.1:5001"))
 AURACARDS_API_URL = os.environ.get(
@@ -368,18 +402,16 @@ class PomodoroHandler(SimpleHTTPRequestHandler):
             self.api_error(str(error), error.status)
 
     def local_api_only(self):
-        # Only trusted same-origin browser calls and loopback peer calls may
-        # mutate the shared timer or fetch deck snapshots.
         origin = self.headers.get("Origin")
         fetch_site = self.headers.get("Sec-Fetch-Site")
         host = self.headers.get("Host", "")
-        try:
-            parsed = urlparse("http://" + host)
-            allowed = parsed.hostname in ("localhost", "127.0.0.1", "::1") and parsed.port == self.server.server_port
-        except ValueError:
-            allowed = False
-        if not allowed or (origin and origin != "http://" + host) or fetch_site == "cross-site":
-            self.api_error("This API is available only to local same-origin clients.", 403)
+        if not timer_request_is_same_origin(
+            host,
+            origin,
+            fetch_site,
+            self.server.server_port,
+        ):
+            self.api_error("This API is available only to same-origin clients.", 403)
             return False
         return True
 
