@@ -1,0 +1,45 @@
+envVarGroups:
+  - name: study-integration
+    envVars:
+      - key: STUDY_INTEGRATION_TOKEN
+        generateValue: true
+
+services:
+  - type: web
+    name: pomodoro-website
+    runtime: python
+    plan: starter
+    buildCommand: python -m pip install -r requirements.txt
+    startCommand: python server.py
+    healthCheckPath: /api/health
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: POMODORO_DB
+        value: /var/data/pomodoro.db
+      - fromGroup: study-integration
+    disk:
+      name: pomodoro-data
+      mountPath: /var/data
+      sizeGB: 1
+
+  - type: web
+    name: aura-cards
+    runtime: python
+    rootDir: Auracards-main/Auracards-main
+    plan: starter
+    buildCommand: python -m pip install -r requirements.txt
+    startCommand: python app.py
+    healthCheckPath: /api/health
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: AURA_DATA_DIR
+        value: /var/data/aura
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
+      - fromGroup: study-integration
+    disk:
+      name: aura-data
+      mountPath: /var/data
+      sizeGB: 1
