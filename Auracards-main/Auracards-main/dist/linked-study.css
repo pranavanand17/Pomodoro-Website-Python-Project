@@ -1,0 +1,80 @@
+/* Focus companion: follows the active Aura theme; art direction is defined in themes.css. */
+.focus-shortcut{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:7px;height:34px;padding:0 11px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--muted);font-size:11px;font-weight:500;letter-spacing:.02em;transition:color .18s,background .18s,border-color .18s;white-space:nowrap}
+.focus-shortcut svg{width:16px;height:16px}
+.focus-shortcut:hover{color:var(--text);background:var(--panel-hover)}
+.focus-shortcut[aria-expanded="true"]{background:var(--panel);border-color:var(--border);color:var(--gold)}
+.focus-shortcut-dot{width:5px;height:5px;display:none;border-radius:50%;background:var(--gold)}
+.focus-shortcut-dot.running{display:block}
+.aura-workspace{display:grid;grid-template-columns:minmax(0,1fr) 0px;align-items:start;min-width:0;overflow-x:clip;transition:grid-template-columns .46s cubic-bezier(.22,.8,.2,1)}
+.aura-workspace-main{min-width:0}
+.aura-workspace-main main,.aura-workspace-main footer{transition:padding .46s cubic-bezier(.22,.8,.2,1)}
+.aura-workspace.focus-companion-open{grid-template-columns:minmax(0,1fr) 310px;gap:0}
+.aura-workspace.focus-companion-open main{padding-left:34px;padding-right:32px}
+.aura-workspace.focus-companion-open footer{padding-left:34px;padding-right:32px}
+.aura-workspace.focus-companion-open .deck-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.focus-companion{position:sticky;top:20px;z-index:5;margin:25px 28px 28px 0;width:282px;min-width:0;background:var(--sidebar);border:1px solid var(--border);border-radius:16px;box-shadow:0 16px 45px rgb(0 0 0 / 5%);max-height:calc(100vh - 40px);overflow-y:auto;overscroll-behavior:contain;scrollbar-color:var(--border) transparent;scrollbar-width:thin;transform-origin:right top}
+.focus-companion[hidden],.linked-backdrop[hidden],.focus-companion [hidden]{display:none!important}
+.focus-companion:focus{outline:none}
+.linked-panel-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:19px 17px 15px}
+.linked-eyebrow{display:block;color:var(--muted);font-size:9px;font-weight:600;letter-spacing:.14em;margin-bottom:7px}
+.linked-panel-top h2{font-size:14px;letter-spacing:-.18px;line-height:1.45;color:var(--text);font-weight:500}
+.linked-close{font-size:22px;min-width:27px;min-height:27px;margin:-4px -6px 0 0;padding:3px}
+.linked-timer-area{padding:16px 17px 20px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--panel)}
+.linked-timer-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.linked-phase{font-size:11px;color:var(--gold);font-weight:500}
+.linked-connection{display:inline-flex;gap:6px;align-items:center;font-size:10px;color:var(--muted)}
+.linked-connection i{width:6px;height:6px;border-radius:50%;background:var(--muted);opacity:.6}
+.linked-connection.online i{background:var(--halo);opacity:1}
+.linked-connection.offline i{background:var(--muted);opacity:1}
+.linked-clock{font-weight:400;font-size:58px;line-height:1.16;letter-spacing:-2.7px;color:var(--text);font-variant-numeric:tabular-nums;font-feature-settings:"tnum";margin:16px 0 2px}
+.linked-round{font-size:10px;color:var(--muted);letter-spacing:.01em}
+.linked-track{height:3px;margin:18px 0 21px;border-radius:99px;background:var(--border);overflow:hidden}
+.linked-fill{height:100%;width:0;background:var(--gold);border-radius:inherit;transition:width .35s linear}
+.linked-modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;padding:3px;background:var(--sidebar);border:1px solid var(--border);border-radius:9px}
+.linked-modes button{min-width:0;min-height:33px;border:1px solid transparent;border-radius:6px;background:transparent;font-size:10px;color:var(--muted);transition:background .15s,color .15s}
+.linked-modes button:hover:not(:disabled){color:var(--text)}
+.linked-modes button[aria-pressed="true"]{background:var(--panel-hover);color:var(--text);border-color:var(--border)}
+.linked-control-row{display:flex;gap:8px;margin-top:12px}
+.linked-control-row .btn{flex:1;padding:10px 7px;min-width:0;font-size:11px}
+.linked-control-row #linkedToggle{flex:1.6}
+.linked-study-area{padding:20px 17px 19px;border-bottom:1px solid var(--border)}
+.linked-section-title{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.linked-section-title h3{font-size:12px;font-weight:500}
+.linked-section-title span{font-size:8px;font-weight:600;color:var(--muted);letter-spacing:.1em}
+#linkedStudyHint{margin:6px 0 13px;color:var(--muted);font-size:11px;line-height:1.6}
+.linked-deck-row{display:flex;gap:6px;flex-wrap:wrap}
+.linked-deck-row .btn{font-size:10px}
+.linked-gate{margin-top:11px;padding:9px 10px;border-left:2px solid var(--gold);background:var(--panel);border-radius:0 6px 6px 0;font-size:10px;line-height:1.65;color:var(--muted)}
+.linked-footer-area{padding:0 17px 9px}
+.linked-details{border-bottom:1px solid var(--border)}
+.linked-details:last-child{border-bottom:0}
+.linked-details>summary{min-height:46px;display:flex;align-items:center;gap:9px;list-style:none;cursor:pointer;font-size:11px;color:var(--muted)}
+.linked-details>summary::-webkit-details-marker{display:none}
+.linked-details>summary:hover{color:var(--text)}
+.linked-details>summary svg{width:14px;height:14px}
+.linked-chevron{margin-left:auto;font-size:16px;line-height:1;transition:transform .16s ease}
+.linked-details[open] .linked-chevron{transform:rotate(180deg)}
+.linked-settings{padding:4px 0 16px;display:grid;gap:12px}
+.linked-duration-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.linked-duration-grid label{min-width:0;font-size:10px;color:var(--muted)}
+.linked-duration-grid label span{font-size:9px;opacity:.65}
+.linked-duration-grid input{display:block;width:100%;margin-top:6px;border:1px solid var(--border);border-radius:7px;background:var(--panel);color:var(--text);padding:8px 7px;outline:none;min-height:35px;font-size:12px;font-variant-numeric:tabular-nums}
+.linked-duration-grid input:focus-visible{outline:2px solid var(--halo);outline-offset:1px}
+.linked-check{display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--muted);font-size:11px}
+.linked-check input{width:15px;height:15px;margin:0;padding:0;accent-color:var(--gold);flex:0 0 15px}
+.linked-settings>.btn{justify-self:start}
+.linked-connection-copy{padding:0 0 14px;display:grid;gap:8px;color:var(--muted);font-size:10px;line-height:1.6;overflow-wrap:anywhere}
+.linked-backdrop{display:none}
+/* A linked study session locks card interactions, not the rest of the page. */
+.focus-frozen .study-layout{opacity:.73;transition:opacity .2s ease}
+
+@media(max-width:1100px){.aura-workspace.focus-companion-open{grid-template-columns:minmax(0,1fr) 294px}.focus-companion{width:272px;margin-right:22px}.aura-workspace.focus-companion-open main{padding-left:24px;padding-right:24px}.aura-workspace.focus-companion-open footer{padding-left:24px;padding-right:24px}}
+@media(max-width:850px){.aura-workspace.focus-companion-open{grid-template-columns:minmax(0,1fr)}.aura-workspace.focus-companion-open main{padding-left:48px;padding-right:48px}.aura-workspace.focus-companion-open footer{padding-left:48px;padding-right:48px}.aura-workspace.focus-companion-open .deck-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.focus-companion{position:fixed;right:12px;top:12px;bottom:12px;width:min(330px,calc(100vw - 24px));max-height:none;margin:0;z-index:101;box-shadow:0 14px 44px rgb(0 0 0 / 30%)}.linked-backdrop:not([hidden]){display:block;position:fixed;inset:0;border:0;background:rgb(0 0 0 / 49%);z-index:100;cursor:default}.aura-workspace.focus-companion-open .aura-workspace-main{min-width:0}
+.aura-workspace-main main,.aura-workspace-main footer{transition:padding .46s cubic-bezier(.22,.8,.2,1)}}
+@media(max-width:700px){.focus-shortcut{min-width:34px;padding:0 7px}.focus-shortcut>span:nth-child(2){display:none}.aura-workspace.focus-companion-open main{padding-left:18px;padding-right:18px}.aura-workspace.focus-companion-open footer{padding-left:18px;padding-right:18px}.aura-workspace.focus-companion-open .deck-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:410px){.focus-companion{right:0;top:0;bottom:0;width:min(344px,calc(100vw - 22px));border-radius:14px 0 0 14px}}
+@media(prefers-reduced-motion:reduce){.focus-companion{animation:none}.linked-fill,.focus-shortcut,.linked-modes button,.linked-chevron{transition:none}}
+@media(max-width:850px){body.focus-drawer-lock{overflow:hidden}}
+
+@media(max-width:850px){.aura-workspace{grid-template-columns:minmax(0,1fr)}}
+@media(prefers-reduced-motion:reduce){.aura-workspace,.aura-workspace-main main,.aura-workspace-main footer{transition:none}}

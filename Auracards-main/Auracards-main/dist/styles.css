@@ -211,3 +211,47 @@ progress{width:100%;accent-color:var(--halo);margin-top:15px}
 
 .format-control{margin-top:14px}
 select:disabled{opacity:.55;cursor:not-allowed}
+
+/* Clear question / answer identities, within the existing Aura palette. */
+.card-front{border-top:2px solid color-mix(in srgb,var(--halo) 75%,var(--border))}
+.card-back{border-color:color-mix(in srgb,var(--gold) 48%,var(--border));border-top:2px solid var(--gold);background:radial-gradient(ellipse at 50% 0%,color-mix(in srgb,var(--gold) 11%,transparent),transparent 78%),var(--panel)}
+.card-label{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:5px 10px;border-radius:20px;background:color-mix(in srgb,var(--halo) 10%,var(--panel));font-weight:500}
+.card-label svg{width:12px;height:12px}
+.card-back .card-label{color:var(--gold);background:color-mix(in srgb,var(--gold) 12%,var(--panel))}
+.card-front{pointer-events:auto}
+.card-back{pointer-events:none}
+.flashcard.flipped .card-front{pointer-events:none}
+.flashcard.flipped .card-back{pointer-events:auto}
+
+/* Non-rotating reveals keep both text faces in their natural orientation. */
+.flashcard:is([data-animation="glitch"],[data-animation="zen"],[data-animation="slide"],[data-animation="bloom"]) .card-inner{transform:none;transition:none;transform-style:flat}
+.flashcard:is([data-animation="glitch"],[data-animation="zen"],[data-animation="slide"],[data-animation="bloom"]) .card-face{backface-visibility:visible;-webkit-backface-visibility:visible;transform:none;transition:opacity .6s ease,transform .6s ease,filter .6s ease}
+.flashcard:is([data-animation="glitch"],[data-animation="zen"],[data-animation="slide"],[data-animation="bloom"]) .card-front{opacity:1}
+.flashcard:is([data-animation="glitch"],[data-animation="zen"],[data-animation="slide"],[data-animation="bloom"]) .card-back{opacity:0}
+.flashcard:is([data-animation="glitch"],[data-animation="zen"],[data-animation="slide"],[data-animation="bloom"]).flipped .card-front{opacity:0}
+.flashcard:is([data-animation="glitch"],[data-animation="zen"],[data-animation="slide"],[data-animation="bloom"]).flipped .card-back{opacity:1}
+.flashcard[data-animation="zen"] .card-face{transition-duration:.8s;transition-timing-function:cubic-bezier(.25,.1,.25,1)}
+.flashcard[data-animation="slide"] .card-face{transition-duration:.42s;transition-timing-function:cubic-bezier(.2,.7,.2,1)}
+.flashcard[data-animation="slide"] .card-back{transform:translateX(24px)}
+.flashcard[data-animation="slide"].flipped .card-front{transform:translateX(-24px)}
+.flashcard[data-animation="slide"].flipped .card-back{transform:translateX(0)}
+.flashcard[data-animation="bloom"] .card-back{transform:scale(.94);filter:blur(5px)}
+.flashcard[data-animation="bloom"].flipped .card-front{transform:scale(1.035);filter:blur(5px)}
+.flashcard[data-animation="bloom"].flipped .card-back{transform:scale(1);filter:blur(0)}
+
+.animation-settings{margin-top:26px;padding-top:22px;border-top:1px solid var(--border)}
+.animation-settings>label{max-width:340px}
+.animation-settings>.helper{margin:9px 0 18px}
+.animation-preview{height:190px}
+.animation-preview .card-question{font-size:20px}
+.animation-preview .card-answer{font-size:18px}
+.animation-preview .card-face{padding:18px 22px;gap:10px}
+.field-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:18px}
+.field-heading .text-link{font-size:10px;min-height:20px}
+.upload-category-editor{margin-top:12px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg)}
+.upload-category-editor input{background:var(--panel)}
+.category-editor-actions{display:flex;gap:14px;align-items:center;margin-top:12px}
+.category-status{font-size:11px;line-height:1.6;color:var(--text);margin-top:8px;overflow-wrap:anywhere}
+.category-status:empty{display:none}
+@media(max-width:450px){.theme-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.animation-preview{height:200px}.animation-preview .card-question{font-size:18px}.animation-preview .card-answer{font-size:17px}}
+@media(prefers-reduced-motion:reduce){.flashcard .card-inner,.flashcard .card-face{transition:none!important;animation:none!important}}

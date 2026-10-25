@@ -32,6 +32,10 @@ class DocumentText:
 
 def normalize(text):
     text = unicodedata.normalize("NFKC", text or "")
+    # PowerPoint soft line breaks are vertical tabs, not literal newlines.
+    # Preserve them before removing controls, otherwise neighboring words merge.
+    for separator in ('\r\n', '\r', '\v', '\f', '\u2028', '\u2029'):
+        text = text.replace(separator, '\n')
     text = re.sub(r"([A-Za-z])-\s*\n\s*([a-z])", r"\1\2", text)
     text = "".join(c for c in text if c in "\n\t" or unicodedata.category(c)[0] != "C")
     # Keep indentation in explicit Q&A code answers; normalize interior prose

@@ -1,6 +1,8 @@
+> For the new two-project integration, use [LINKING.md](../LINKING.md). This page documents the retained legacy standalone /pomodoro timer.
+
 # Pomodoro integration
 
-Aura includes a working focus timer so both projects can be developed independently. In the combined local setup, its clock button opens the Pomodoro application at `http://127.0.0.1:5001` and keeps Aura's session tracking. Configure a different browser-facing timer URL in **Settings → Connections → Timer URL** if needed. When the field is blank, Aura uses its server's `POMODORO_URL` setting.
+Aura includes a working focus timer so both projects can be developed independently. Your friend's timer can replace that screen while keeping Aura's session tracking. Store its URL in **Settings → Connections → Timer URL**.
 
 ## Handoff
 
@@ -23,40 +25,14 @@ The URL fragment carries the session connection:
 Example shape, with placeholders rather than real tokens:
 
 ```text
-http://127.0.0.1:5001/?deck_id=DECK_ID&duration=25&return_url=ENCODED_RETURN_URL#aura_session=SESSION_ID&aura_token=TOKEN&aura_api=ENCODED_API_URL
+http://localhost:8000/focus?deck_id=DECK_ID&duration=25&return_url=ENCODED_RETURN_URL#aura_session=SESSION_ID&aura_token=TOKEN&aura_api=ENCODED_API_URL
 ```
 
 Fragments are read by the timer's JavaScript and are not sent as part of its initial HTTP request. Keep the token in tab-local sessionStorage for refresh, then remove the Aura fields from the address bar. Do not copy it to logs, analytics, query strings or shared links. The friend's page should avoid third-party scripts that could read the session capability.
 
 The supplied adapter expects fragment key/value parameters. A timer that uses hash-based routing needs to adapt its routing so these fields can be read without breaking its route.
 
-## Pomodoro support
-
-The Pomodoro application consumes the handoff directly: it stores the
-short-lived session capability in tab-local session storage, removes the
-capability from the address bar, and calls Aura's focus-session status,
-start, pause, cancel, and complete endpoints. No adapter copy or frontend
-build is required. The token authorizes only the single session and is not
-the shared service integration token.
-
-Aura also exposes an authenticated aggregate endpoint at
-`GET /api/integrations/summary`. Pomodoro requests it through
-`GET /api/integrations/auracards`; Aura requests Pomodoro's equivalent
-summary through `GET /api/integrations/pomodoro`. These summaries contain
-only completed-session counts and minutes, not deck IDs, documents, notes,
-or task names. The two servers use the same `STUDY_INTEGRATION_TOKEN` value,
-which must contain at least 32 characters.
-
-Aura's main page can be embedded only from the exact origins listed in
-`AURA_FRAME_ORIGINS`. Without that explicit setting, Aura sends
-`X-Frame-Options: DENY` and CSP `frame-ancestors 'none'`. This exception
-applies only to Aura's main page; API routes and other pages remain
-non-embeddable. Pomodoro's drawer also provides a standalone link.
-
-## Legacy adapter
-
-`examples/aura-timer-adapter.js` remains available for third-party timer
-projects that do not use this Pomodoro application.
+## Copy-paste adapter
 
 Copy `examples/aura-timer-adapter.js` into the timer project and load it **before** the project's own timer JavaScript:
 
@@ -109,10 +85,10 @@ If the friend's timer implements only the query parameters and return link, navi
 
 ## Local testing
 
-1. Run Aura on `http://127.0.0.1:5000`.
-2. Run Pomodoro on `http://127.0.0.1:5001` with the same integration token.
-3. Leave Aura's Timer URL blank or set it to `http://127.0.0.1:5001`; choose a 1-minute duration for testing.
-4. Open the timer from Aura. Verify Start, Pause, Resume, completion and return to the selected deck.
+1. Run Aura on `http://localhost:5000`.
+2. Run your friend's project on another local port, such as `http://localhost:8000`.
+3. Set that timer URL in Aura; choose a 1-minute duration for testing.
+4. Open it from Aura. Verify Start, Pause, Resume, completion and return to the selected deck.
 5. Attempt early completion: it should return 409 and add zero minutes. Repeat a valid completion: it should keep a single entry.
 
 The timer-control endpoint handles CORS preflight and checks the actual request's token and bound origin. `AURA_ALLOWED_ORIGINS` is unnecessary for this per-session handoff. It is used only when hosting the Aura frontend separately.

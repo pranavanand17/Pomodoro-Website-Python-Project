@@ -1,6 +1,6 @@
 # API reference
 
-Base URL: `http://localhost:5000`. Responses use JSON except frontend/static files and CORS preflight. Error responses have `{"error":"Human-readable message","code":"machine_code"}` with an appropriate non-2xx status. A client should show the error, retain the selected file and allow a deliberate retry.
+Base URL: `http://localhost:5001` (combined package default; can be changed with `--port`). Responses use JSON except frontend/static files and CORS preflight. Error responses have `{"error":"Human-readable message","code":"machine_code"}` with an appropriate non-2xx status. A client should show the error, retain the selected file and allow a deliberate retry.
 
 ## Browser initialization
 
@@ -32,10 +32,14 @@ The UI keeps the CSRF value in memory. Send the same cookie and `X-Aura-CSRF` he
 | `category` | Yes | Category, 1–100 characters |
 | `count` | No | Integer 1–50; default 20 |
 | `difficulty` | No | `beginner`, `intermediate`, `advanced`, `mixed` (default) |
-| `engine` | No | `extractive` (default), `cloud` or `ollama` |
+| `engine` | No | `extractive` (default), `cloud`, `ollama` or `llamacpp` |
 | `style` | No | `mixed` (default), `qa`, or `cloze` |
 | `focus` | No | Topic focus, up to 160 characters |
 | `input_format` | No | Offline only: `auto` (default), `qa`, `topics`, `prose`; AI modes accept `auto` |
+| `generation_depth` | No | llama.cpp: `flash`, `balanced`, `thorough` (default) |
+| `answer_detail` | No | llama.cpp: `focused`, `expanded` (default) |
+| `llama_base` | No | Loopback HTTP llama.cpp server address; optional `/v1` |
+| `llama_model` | No | Model ID reported by the local server; default auto-detect |
 | `cloud_consent` | For cloud | Exactly `yes`; required per request before processing/sending text |
 
 Do not set a multipart Content-Type manually when using browser `FormData`; let the browser add the boundary.
@@ -71,6 +75,13 @@ Cloud mode requires `OPENAI_API_KEY` on the server and explicit `cloud_consent=y
 A successful request returns 200 even when fewer cards can be supported. `generated_count` is the actual number. An invalid document, no usable text or no valid cards returns an error rather than fabricated content. AI errors never silently switch generation modes.
 
 Common statuses: 400 invalid fields, 403 CSRF/origin, 413 size limit, 415 wrong/unsupported format, 422 unreadable/no text/no cards, 429 busy/rate limit, 502 invalid model output, 503 local model unavailable, 504 local model request timeout. Use the returned message/code, since a single status can cover multiple conditions.
+
+llama.cpp supports `Accept: application/x-ndjson` for progress/result/error events.
+Its `generation_report.pipeline` is `curriculum-v2` for Balanced/Thorough and
+`flash-v1` for Flash. Flash skips model mapping/review, so `mapped_concepts`,
+`covered_concepts` and `repaired_cards` are zero, not accuracy/coverage estimates.
+`model_calls` counts drafting requests (including retries); source-section fields
+report selection and representation. Flash results retain source excerpts.
 
 ## Focus-session collection
 

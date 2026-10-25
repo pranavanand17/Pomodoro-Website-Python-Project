@@ -137,6 +137,25 @@ back to another engine. Source matching proves an excerpt exists; it does not
 prove that the model's answer follows logically from it. The revision pass is
 also model-generated and remains fallible.
 
+## Advanced local llama.cpp generation
+
+**Local AI · llama.cpp**, in Balanced/Thorough mode, uses a source-grounded study blueprint, coverage-aware
+objective selection, drafting, editorial keep/revise/drop review, deterministic
+validation and bounded gap-filling. Thorough/Balanced work budgets and
+Expanded/Focused answer controls are available in the upload panel. Progress is
+streamed to the browser, and the review shows the original generation's concept
+coverage, omitted concepts and actual repairs. The model is selected from your
+running llama-server; no Qwen-specific behavior or extra model is required.
+
+**Flash** drafts directly from selected passages, retaining deterministic source,
+format, numeric and duplicate checks. It skips concept mapping and separate model
+review/repair, with a three-minute model-work budget. The result explicitly
+reports these limits. Use Focused answers and a smaller card count for speed.
+
+See [LLAMA_CPP.md](../LLAMA_CPP.md) for the full pipeline, work budgets, cancellation,
+source limits, setup and the distinction between evidence checks and semantic
+accuracy. The cloud two-call budget described above applies only to Cloud AI.
+
 ## Review workflow
 
 - Expand a card to inspect or edit its question and answer.

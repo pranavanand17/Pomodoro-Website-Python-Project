@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0b0b0e">
   <title>Aura Cards</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 50 50'%3E%3Crect width='50' height='50' rx='14' fill='%23121119'/%3E%3Cpath d='M13 34 25 12l12 22M18 27h14' fill='none' stroke='%23d8be83' stroke-width='3'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css"><script src="app.js" defer></script>
+  <link rel="stylesheet" href="styles.css"><script src="app.js" defer></script><link rel="stylesheet" href="linked-study.css"><link rel="stylesheet" href="themes.css"><script src="timer-client.js" defer></script><script src="linked-study.js" defer></script>
 </head>
 <body>
 <div class="app-shell">
@@ -14,20 +14,75 @@
     <header class="topbar">
       <a class="brand" href="#" aria-label="Aura Cards home">Aura Cards</a>
       <nav aria-label="Main navigation"><button data-view="overview" class="nav-item active">Overview</button><button data-view="decks" class="nav-item">Decks</button><button data-view="study" class="nav-item">Study</button><button data-view="starred" class="nav-item">Starred</button></nav>
-      <div class="top-actions"><button id="sidebarFocus" class="icon-btn" aria-label="Open Pomodoro timer" title="Pomodoro timer"><span data-icon="clock"></span></button><button data-view="settings" class="icon-btn" aria-label="Appearance and settings" title="Settings"><span data-icon="settings"></span></button><button id="quickTheme" class="icon-btn" aria-label="Switch light and dark theme" title="Switch theme"><span data-icon="sun"></span></button><button id="uploadTop" class="btn btn-gold btn-small">Upload notes</button></div>
+      <div class="top-actions"><button id="sidebarFocus" class="focus-shortcut" type="button" aria-label="Show Focus companion" aria-controls="linkedFocus" aria-expanded="false" title="Show Focus companion"><span data-icon="clock"></span><span>Focus</span><span class="focus-shortcut-dot" id="focusShortcutDot" aria-hidden="true"></span></button><button data-view="settings" class="icon-btn" aria-label="Appearance and settings" title="Settings"><span data-icon="settings"></span></button><button id="quickTheme" class="icon-btn" aria-label="Switch light and dark theme" title="Switch theme"><span data-icon="sun"></span></button><button id="uploadTop" class="btn btn-gold btn-small">Upload notes</button></div>
     </header>
-    <main id="mainContent" tabindex="-1"></main>
-    <footer>Saved on this device<span>PDF · DOCX · PPTX</span></footer>
+    <div class="aura-workspace" id="auraWorkspace">
+      <div class="aura-workspace-main">
+        <main id="mainContent" tabindex="-1"></main>
+        <footer>Saved on this device<span>PDF · DOCX · PPTX</span></footer>
+      </div>
+      <aside id="linkedFocus" class="focus-companion" aria-labelledby="linkedTitle" tabindex="-1" hidden>
+        <div class="linked-panel-top">
+          <div><span class="linked-eyebrow">STUDY TOOLS</span><h2 id="linkedTitle">Focus companion</h2></div>
+          <button type="button" class="icon-btn linked-close" id="linkedClose" aria-label="Hide Focus companion" title="Hide companion">×</button>
+        </div>
+        <div class="linked-timer-area">
+          <div class="linked-timer-heading"><span id="linkedMode" class="linked-phase">Focus</span><span class="linked-connection" id="linkedConnection" role="status"><i aria-hidden="true"></i><span id="linkedConnectionText">Connecting</span></span></div>
+          <div class="linked-clock" id="linkedClock" role="timer" aria-label="Time remaining">25:00</div>
+          <div class="linked-round" id="linkedRound">Round 1 of 4</div>
+          <div class="linked-track" aria-hidden="true"><div id="linkedProgress" class="linked-fill"></div></div>
+          <div class="linked-modes" role="group" aria-label="Timer interval">
+            <button type="button" disabled data-timer-mode="focus">Focus</button>
+            <button type="button" disabled data-timer-mode="shortBreak">Short</button>
+            <button type="button" disabled data-timer-mode="longBreak">Long</button>
+          </div>
+          <div class="linked-control-row">
+            <button type="button" id="linkedToggle" class="btn btn-gold" data-timer-action="toggle" disabled>Start focus</button>
+            <button type="button" class="btn btn-ghost" data-timer-action="reset" disabled>Reset</button>
+          </div>
+        </div>
+        <div class="linked-study-area">
+          <div class="linked-section-title"><h3>Study together</h3><span>OPTIONAL</span></div>
+          <p id="linkedStudyHint">Keep your cards in sync with your focus session.</p>
+          <div class="linked-deck-row">
+            <button type="button" class="btn btn-ghost btn-small" id="linkedDeck" disabled>Link current deck</button>
+            <button type="button" class="btn btn-ghost btn-small" id="linkedUnlink" hidden>Unlink deck</button>
+          </div>
+          <p id="linkedGate" class="linked-gate" role="status" hidden></p>
+        </div>
+        <div class="linked-footer-area">
+          <details class="linked-details" id="linkedPreferences">
+            <summary><span data-icon="settings" aria-hidden="true"></span> Timer preferences <span class="linked-chevron" aria-hidden="true">⌄</span></summary>
+            <form id="linkedSettings" class="linked-settings">
+              <div class="linked-duration-grid">
+                <label>Focus <span>min</span><input id="linked-focus" type="number" min="1" max="180" step="1" value="25" inputmode="numeric" required></label>
+                <label>Short <span>min</span><input id="linked-shortBreak" type="number" min="1" max="60" step="1" value="5" inputmode="numeric" required></label>
+                <label>Long <span>min</span><input id="linked-longBreak" type="number" min="1" max="90" step="1" value="15" inputmode="numeric" required></label>
+              </div>
+              <label class="linked-check"><input id="linked-autoStartBreaks" type="checkbox"><span>Auto-start breaks</span></label>
+              <label class="linked-check"><input id="linked-autoStartFocus" type="checkbox"><span>Auto-start focus</span></label>
+              <button id="linkedSave" disabled class="btn btn-ghost btn-small" type="submit">Save durations</button>
+            </form>
+          </details>
+          <details class="linked-details linked-connection-details" id="linkedDetails">
+            <summary><span data-icon="external" aria-hidden="true"></span> Connection details <span class="linked-chevron" aria-hidden="true">⌄</span></summary>
+            <div class="linked-connection-copy"><p id="linkedStatus">Connecting to Pomodoro…</p><p id="linkedLibrary">Keeping your decks in sync locally.</p></div>
+          </details>
+        </div>
+      </aside>
+    </div>
+    <button type="button" id="linkedBackdrop" class="linked-backdrop" aria-label="Close Focus companion" hidden></button>
   </div>
 </div>
-<dialog id="uploadDialog" class="modal"><form id="uploadForm"><div class="modal-heading"><h2>Upload notes</h2><button type="button" class="icon-btn" data-close aria-label="Close">×</button></div><label id="dropZone" class="drop-zone" tabindex="0"><span class="upload-symbol" data-icon="upload"></span><strong id="fileLabel">Choose file</strong><span>PDF · DOCX · PPTX · 20 MB max</span><input id="fileInput" type="file" accept=".pdf,.docx,.pptx" hidden></label><div class="form-grid"><label>Deck name<input name="name" id="uploadName" maxlength="100" required placeholder="e.g. Chapter 4"></label><label>Category<select id="uploadCategory"></select></label><label>Number of cards<select id="uploadCount"><option>10</option><option selected>20</option><option>30</option><option>50</option></select></label><label>Difficulty<select id="uploadDifficulty"><option value="mixed">Mixed</option><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select></label></div><label class="generator-control">Generation<select id="uploadEngine"><option value="extractive">Offline · lightweight</option><option value="cloud">Cloud AI · API key</option><option value="ollama">Local AI · Ollama</option></select></label><div id="cloudNotice" hidden><label class="check-line"><input id="cloudConsent" type="checkbox"><span>Send this document’s text to OpenAI. API charges may apply.</span></label><p class="helper" id="cloudSetup"></p></div><details class="generation-options"><summary>Card options</summary><label class="format-control">Document format<select id="uploadFormat"><option value="auto">Auto-detect</option><option value="qa">Questions &amp; answers</option><option value="topics">Topics &amp; explanations</option><option value="prose">General prose</option></select></label><div class="form-grid"><label>Card style<select id="uploadStyle"><option value="mixed">Mixed</option><option value="qa">Question &amp; answer</option><option value="cloze">Fill in the blank</option></select></label><label>Focus<input id="uploadFocus" maxlength="160" placeholder="Optional topic"></label></div></details><p id="uploadStatus" class="form-status" role="status"></p><progress id="uploadProgress" hidden></progress><div class="modal-footer"><button type="button" class="btn btn-ghost" data-close>Cancel</button><button type="submit" id="generateBtn" class="btn btn-gold">Generate cards</button></div></form></dialog>
+<dialog id="uploadDialog" class="modal"><form id="uploadForm"><div class="modal-heading"><h2>Upload notes</h2><button type="button" class="icon-btn" data-close aria-label="Close">×</button></div><label id="dropZone" class="drop-zone" tabindex="0"><span class="upload-symbol" data-icon="upload"></span><strong id="fileLabel">Choose file</strong><span>PDF · DOCX · PPTX · 20 MB max</span><input id="fileInput" type="file" accept=".pdf,.docx,.pptx" hidden></label><div class="form-grid"><label>Deck name<input name="name" id="uploadName" maxlength="100" required placeholder="e.g. Chapter 4"></label><div class="upload-category-field"><div class="field-heading"><label for="uploadCategory">Category</label><button id="uploadCategoryAdd" type="button" class="text-link" aria-expanded="false" aria-controls="uploadCategoryEditor">+ New</button></div><select id="uploadCategory"></select><div id="uploadCategoryEditor" class="upload-category-editor" hidden><label for="uploadNewCategory">New category name</label><input id="uploadNewCategory" maxlength="100" placeholder="e.g. Semester 3" aria-describedby="uploadCategoryStatus"><p id="uploadCategoryStatus" class="category-status" role="status"></p><div class="category-editor-actions"><button id="uploadCategorySave" class="btn btn-small" type="button">Add</button><button id="uploadCategoryCancel" class="text-link" type="button">Cancel</button></div></div></div><label>Number of cards<select id="uploadCount"><option>10</option><option selected>20</option><option>30</option><option>50</option></select></label><label>Difficulty<select id="uploadDifficulty"><option value="mixed">Mixed</option><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select></label></div><label class="generator-control">Generation<select id="uploadEngine"><option value="extractive">Offline · lightweight</option><option value="cloud">Cloud AI · API key</option><option value="llamacpp">Local AI · llama.cpp</option><option value="ollama">Local AI · Ollama</option></select></label><div id="llamaNotice" class="local-ai-notice" hidden><div class="local-ai-heading"><strong>Local document AI</strong><button type="button" id="llamaDetect" class="text-link">Detect again</button></div><p id="llamaStatus" class="helper" role="status">Checking for llama.cpp…</p><label for="llamaModel">Model<select id="llamaModel"><option value="">Auto-detect loaded model</option></select></label><div class="form-grid local-generation-options"><label>Generation mode<select id="generationDepth"><option value="flash">Flash · quick draft</option><option value="thorough" selected>Thorough · deeper coverage</option><option value="balanced">Balanced · faster</option></select></label><label>Answer detail<select id="answerDetail"><option value="expanded" selected>Expanded explanations</option><option value="focused">Focused answers</option></select></label></div><p id="generationDepthNotice" class="helper" aria-live="polite">Maps study concepts, writes cards, then checks and repairs them against your notes. Thorough allows broader coverage and up to 15 minutes of processing.</p><details><summary>Server address</summary><label for="llamaBase">Local llama.cpp URL<input id="llamaBase" type="url" placeholder="Auto · localhost:8080" maxlength="2000"></label><p class="helper">Uses the running model on this computer. Documents stay local. For a custom port, enter its address and choose Detect again.</p></details></div><div id="cloudNotice" hidden><label class="check-line"><input id="cloudConsent" type="checkbox"><span>Send this document’s text to OpenAI. API charges may apply.</span></label><p class="helper" id="cloudSetup"></p></div><details class="generation-options"><summary>Card options</summary><label class="format-control">Document format<select id="uploadFormat"><option value="auto">Auto-detect</option><option value="qa">Questions &amp; answers</option><option value="topics">Topics &amp; explanations</option><option value="prose">General prose</option></select></label><div class="form-grid"><label>Card style<select id="uploadStyle"><option value="mixed">Mixed</option><option value="qa">Question &amp; answer</option><option value="cloze">Fill in the blank</option></select></label><label>Focus<input id="uploadFocus" maxlength="160" placeholder="Optional topic"></label></div></details><p id="uploadStatus" class="form-status" role="status"></p><progress id="uploadProgress" hidden aria-label="Document generation in progress"></progress><p id="generationCount" class="helper generation-count" hidden aria-live="polite"></p><div class="modal-footer"><button type="button" class="btn btn-ghost" data-close>Cancel</button><button type="button" id="stopGeneration" class="btn btn-ghost" hidden>Stop generation</button><button type="submit" id="generateBtn" class="btn btn-gold">Generate cards</button></div></form></dialog>
 <dialog id="reviewDialog" class="modal review-modal" aria-labelledby="reviewTitle">
  <form id="reviewForm"><div class="modal-heading"><h2 id="reviewTitle">Review cards</h2><button type="button" class="icon-btn" data-close aria-label="Close review">×</button></div>
  <p id="reviewCount" class="helper" aria-live="polite"></p><details id="reviewWarnings" class="generation-note" hidden><summary>Generation notes</summary><p></p></details>
- <div id="draftCards" class="draft-cards"></div><p id="reviewStatus" class="form-status error" role="status"></p>
+ <div id="reviewGeneration" hidden></div><div id="draftCards" class="draft-cards"></div><p id="reviewStatus" class="form-status error" role="status"></p>
  <div class="modal-footer"><button type="button" id="reviewBack" class="btn btn-ghost">Back</button><button type="submit" id="saveDraftBtn" class="btn btn-gold">Add cards</button></div></form>
 </dialog>
 <dialog id="editorDialog" class="modal"><form id="editorForm"><div class="modal-heading"><h2 id="editorTitle">New deck</h2><button type="button" class="icon-btn" data-close aria-label="Close">×</button></div><div id="editorFields"></div><div class="modal-footer"><button type="button" class="btn btn-ghost" data-close>Cancel</button><button type="submit" class="btn btn-gold">Save changes</button></div></form></dialog>
+<dialog id="categoryDeleteDialog" class="modal compact" aria-labelledby="categoryDeleteTitle"><form id="categoryDeleteForm"><div class="modal-heading"><h2 id="categoryDeleteTitle">Delete category</h2><button type="button" class="icon-btn" data-close aria-label="Cancel category deletion">×</button></div><p id="categoryDeleteName" class="category-delete-name"></p><p id="categoryDeleteMessage" class="helper"></p><label id="categoryDestinationField" for="categoryDestination">Move decks to<select id="categoryDestination"></select></label><p id="categoryDeleteStatus" class="form-status error" role="status"></p><div class="modal-footer"><button type="button" class="btn btn-ghost" data-close>Cancel</button><button type="submit" class="btn btn-danger">Delete category</button></div></form></dialog>
 <dialog id="confirmDialog" class="modal compact"><div class="modal-heading"><h2>Delete this item?</h2><button class="icon-btn" data-close aria-label="Close">×</button></div><p id="confirmText"></p><div class="modal-footer"><button class="btn btn-ghost" data-close>Keep it</button><button id="confirmDelete" class="btn btn-danger">Delete</button></div></dialog>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>

@@ -103,18 +103,6 @@ class FocusStore:
             totals = db.execute("SELECT count(*),coalesce(sum(duration),0) FROM focus_sessions WHERE device=? AND status='completed'", (device,)).fetchone()
         return {"completed_sessions": totals[0], "total_minutes": totals[1] // 60, "sessions": [{"session_id": r["id"], "minutes": r["duration"] // 60, "completed_at": r["completed"]} for r in rows]}
 
-    def integration_summary(self):
-        with self.connect() as db:
-            totals = db.execute(
-                "SELECT count(*), coalesce(sum(duration), 0) "
-                "FROM focus_sessions WHERE status='completed'"
-            ).fetchone()
-        return {
-            "service": "auracards",
-            "completed_sessions": totals[0],
-            "total_minutes": totals[1] // 60,
-        }
-
     def clear(self, device):
         with self.connect() as db:
             db.execute("DELETE FROM focus_sessions WHERE device=?", (device,))

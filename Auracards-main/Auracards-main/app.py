@@ -1,5 +1,7 @@
 """Aura Cards local Flask API and frontend server. Run python app.py."""
 from collections import defaultdict, deque, Counter
+from contextlib import closing
+import hmac
 from datetime import timedelta
 from io import BytesIO
 import os
@@ -13,17 +15,12 @@ from werkzeug.exceptions import HTTPException
 from backend.errors import UserError
 from backend.extraction import MAX_FILE_BYTES, extract_isolated
 from backend.focus import FocusStore
-from backend.integration import IntegrationError, fetch_summary, service_url
+from backend.generation_stream import stream_generation
 from backend.generation import extractive, extractive_details, ollama, ollama_status, _local_base
 from backend.cloud import generate as cloud_generate
+from backend.llamacpp import discover as llama_discover, generate_details as llama_generate, local_base as llama_base
 
 ROOT = Path(__file__).resolve().parent
-
-
-def get_bind_host():
-    if os.environ.get("RENDER_EXTERNAL_HOSTNAME"):
-        return "0.0.0.0"
-    return os.environ.get("HOST", "127.0.0.1")
 
 
 class MemoryRequest(Request):
@@ -46,74 +43,33 @@ def origin_of(value):
     return f"{url.scheme}://{url.netloc}"
 
 
-def configured_frame_origins(value):
-    if isinstance(value, str):
-        values = value.split(",")
-    elif isinstance(value, (list, tuple, set)):
-        values = value
-    else:
-        raise ValueError("AURA_FRAME_ORIGINS must be a list of web origins.")
-
-    origins = []
-    for item in values:
-        if not isinstance(item, str) or not item.strip():
-            continue
-        item = item.strip()
-        try:
-            parsed = urlsplit(item)
-            origin = origin_of(item)
-        except (ValueError, UserError) as error:
-            raise ValueError("AURA_FRAME_ORIGINS contains an invalid origin.") from error
-        if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
-            raise ValueError("AURA_FRAME_ORIGINS accepts origins, not paths.")
-        origins.append(origin)
-    return tuple(dict.fromkeys(origins))
-
-
 def create_app(config=None):
     app = Flask(__name__, static_folder=str(ROOT / "dist"), static_url_path="")
     app.request_class = MemoryRequest
-    trusted_hosts = {"localhost", "127.0.0.1", "[::1]"}
-    trusted_hosts.update(
-        host.strip()
-        for host in os.environ.get("AURA_TRUSTED_HOSTS", "").split(",")
-        if host.strip()
-    )
-    render_hostname = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
-    if render_hostname:
-        trusted_hosts.add(render_hostname)
     app.config.update(
         MAX_CONTENT_LENGTH=MAX_FILE_BYTES + 1024 * 1024,
-        MAX_FORM_MEMORY_SIZE=256 * 1024, MAX_FORM_PARTS=12,
+        MAX_FORM_MEMORY_SIZE=256 * 1024, MAX_FORM_PARTS=16,
         SESSION_COOKIE_NAME="aura_device", SESSION_COOKIE_HTTPONLY=True,
-        SESSION_COOKIE_SAMESITE="Strict",
-        SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "").lower() in ("1", "true", "yes"),
+        SESSION_COOKIE_SAMESITE="Strict", SESSION_COOKIE_SECURE=False,
         PERMANENT_SESSION_LIFETIME=timedelta(days=90),
         DATA_DIR=os.environ.get("AURA_DATA_DIR", str(ROOT / ".aura-data")),
         OLLAMA_URL=os.environ.get("AURA_OLLAMA_URL", "http://127.0.0.1:11434"),
         OLLAMA_MODEL=os.environ.get("AURA_OLLAMA_MODEL", "llama3.2:3b"),
+        LLAMA_URL=os.environ.get("AURA_LLAMA_URL", ""),
+        LLAMA_MODEL=os.environ.get("AURA_LLAMA_MODEL", ""),
+        LLAMA_API_KEY=os.environ.get("AURA_LLAMA_API_KEY", ""),
         OPENAI_API_KEY=os.environ.get("OPENAI_API_KEY", ""),
         CLOUD_MODEL=os.environ.get("AURA_CLOUD_MODEL", "gpt-4.1-mini"),
-        POMODORO_URL=os.environ.get(
-            "POMODORO_URL",
-            "http://127.0.0.1:5001"
-        ),
-        POMODORO_API_URL=os.environ.get(
-            "POMODORO_API_URL",
-            "http://127.0.0.1:5001"
-        ),
-        STUDY_INTEGRATION_TOKEN=os.environ.get("STUDY_INTEGRATION_TOKEN", ""),
-        AURA_FRAME_ORIGINS=os.environ.get("AURA_FRAME_ORIGINS", ""),
         EXTRACTOR=extract_isolated, FOCUS_CLOCK=time.time,
         ALLOWED_ORIGINS=set(filter(None, os.environ.get("AURA_ALLOWED_ORIGINS", "").split(","))),
-        TRUSTED_HOSTS=sorted(trusted_hosts),
+        FRAME_ORIGINS=set(filter(None, os.environ.get("AURA_FRAME_ORIGINS", "").split(","))),
+        TRUSTED_HOSTS=["localhost", "127.0.0.1", "[::1]"],
     )
     if config:
         app.config.update(config)
-    app.config["AURA_FRAME_ORIGINS"] = configured_frame_origins(
-        app.config["AURA_FRAME_ORIGINS"]
-    )
     _local_base(app.config["OLLAMA_URL"])
+    if app.config["LLAMA_URL"]:
+        llama_base(app.config["LLAMA_URL"])
     data_dir = Path(app.config["DATA_DIR"])
     data_dir.mkdir(parents=True, exist_ok=True)
     data_dir.chmod(0o700)
@@ -168,22 +124,6 @@ def create_app(config=None):
             raise UserError("A session token is required.", 401, "unauthorized_session")
         return value[7:]
 
-    def integration_authorized():
-        token = app.config["STUDY_INTEGRATION_TOKEN"]
-        if not isinstance(token, str) or len(token) < 32:
-            raise UserError(
-                "The service integration is not configured.",
-                503,
-                "integration_not_configured",
-            )
-        supplied = request.headers.get("Authorization", "")
-        if not secrets.compare_digest(supplied, f"Bearer {token}"):
-            raise UserError(
-                "A valid integration token is required.",
-                401,
-                "integration_unauthorized",
-            )
-
     @app.before_request
     def preflight():
         if request.method != "OPTIONS":
@@ -203,21 +143,31 @@ def create_app(config=None):
     @app.after_request
     def headers(response):
         response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"
-        frame_document = request.path in ("/", "/index.html")
-        frame_origins = app.config["AURA_FRAME_ORIGINS"]
-        if frame_document and frame_origins:
-            response.headers.pop("X-Frame-Options", None)
-            ancestors = " ".join(frame_origins)
+        policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://localhost:* http://127.0.0.1:* https:; object-src 'none'; base-uri 'self'"
+        frames = app.config["FRAME_ORIGINS"]
+        # Only the workspace page is embeddable, and only when the user opts in.
+        # API endpoints and every other route remain unframeable.
+        if request.path in ("/", "/index.html") and frames:
+            def safe_frame(value):
+                try:
+                    parsed = urlsplit(value)
+                    return (parsed.scheme == 'http' and parsed.hostname in ('localhost', '127.0.0.1')
+                            and parsed.port is not None and parsed.path in ('', '/')
+                            and not any((parsed.username, parsed.password, parsed.query, parsed.fragment))
+                            and value.rstrip('/') == f'{parsed.scheme}://{parsed.netloc}')
+                except ValueError:
+                    return False
+            safe_frames = [value for value in sorted(frames) if safe_frame(value)]
+            if safe_frames:
+                response.headers.pop("X-Frame-Options", None)
+                policy += "; frame-ancestors " + " ".join(safe_frames)
+            else:
+                policy += "; frame-ancestors 'none'"
         else:
-            response.headers["X-Frame-Options"] = "DENY"
-            ancestors = "'none'"
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; connect-src 'self' http://localhost:* "
-            "http://127.0.0.1:* https:; object-src 'none'; base-uri 'self'; "
-            f"frame-ancestors {ancestors}"
-        )
+            policy += "; frame-ancestors 'none'"
+        response.headers["Content-Security-Policy"] = policy
         if request.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
         origin = request.headers.get("Origin")
@@ -255,6 +205,21 @@ def create_app(config=None):
     def timer():
         return send_from_directory(app.static_folder, "pomodoro.html")
 
+    @app.get("/api/integrations/summary")
+    def legacy_pomodoro_summary():
+        # Legacy Study Space's progress widget only needs aggregate totals.
+        # Opt-in via a shared, long-lived token; no deck or study metadata.
+        token = os.environ.get("STUDY_INTEGRATION_TOKEN", "")
+        provided = request.headers.get("Authorization", "")
+        if len(token) < 32 or not hmac.compare_digest(provided, "Bearer " + token):
+            raise UserError("Legacy integration token missing or invalid.", 401, "not_authorized")
+        import sqlite3
+        with closing(sqlite3.connect(str(data_dir / "focus.sqlite3"))) as db:
+            n, seconds = db.execute(
+                "SELECT COUNT(*), COALESCE(SUM(duration),0) FROM focus_sessions WHERE status='completed'"
+            ).fetchone()
+        return jsonify(service="auracards", completed_sessions=n, total_minutes=seconds // 60)
+
     @app.get("/api/health")
     def health():
         return jsonify(status="ok", app="Aura Cards", version="2.2.0")
@@ -265,34 +230,23 @@ def create_app(config=None):
             raise UserError("This origin is not authorized.", 403, "origin_blocked")
         device()
         session.setdefault("csrf", secrets.token_urlsafe(32))
-        return jsonify(csrf_token=session["csrf"], generators=["extractive", "cloud", "ollama"],
-                       max_file_mb=20, ollama_model=app.config["OLLAMA_MODEL"],
-                       timer_url=service_url(app.config["POMODORO_URL"]),
+        return jsonify(csrf_token=session["csrf"], generators=["extractive", "cloud", "ollama", "llamacpp"],
+                       max_file_mb=20, llamacpp={"base_url": app.config["LLAMA_URL"], "model": app.config["LLAMA_MODEL"]}, ollama_model=app.config["OLLAMA_MODEL"], timer_url="/pomodoro",
                        cloud={"configured": bool(app.config["OPENAI_API_KEY"].strip()), "provider": "OpenAI", "model": app.config["CLOUD_MODEL"]})
-
-    @app.get("/api/integrations/summary")
-    def integration_summary():
-        integration_authorized()
-        return jsonify({"success": True, **store.integration_summary()})
-
-    @app.get("/api/integrations/pomodoro")
-    def pomodoro_summary():
-        try:
-            summary = fetch_summary(
-                app.config["POMODORO_API_URL"],
-                app.config["STUDY_INTEGRATION_TOKEN"],
-            )
-        except IntegrationError as error:
-            raise UserError(
-                str(error),
-                503,
-                "pomodoro_unavailable",
-            ) from error
-        return jsonify({"success": True, **summary})
 
     @app.get("/api/models/status")
     def model_status():
         return jsonify(ollama_status(app.config["OLLAMA_URL"], app.config["OLLAMA_MODEL"]))
+
+    @app.get("/api/llamacpp/status")
+    def llama_status():
+        if not same_origin():
+            raise UserError("Open Aura locally to detect llama.cpp.", 403, "origin_blocked")
+        base = request.args.get('base_url', '').strip() or app.config['LLAMA_URL']
+        model = request.args.get('model', '').strip() or app.config['LLAMA_MODEL']
+        if len(base)>2000 or len(model)>1024:
+            raise UserError('Local model settings are too long.',400,'invalid_fields')
+        return jsonify(llama_discover(base, model, app.config['LLAMA_API_KEY']))
 
     @app.post("/api/generate")
     def generate():
@@ -313,7 +267,7 @@ def create_app(config=None):
         difficulty, engine = request.form.get("difficulty", "mixed"), request.form.get("engine", "extractive")
         style, focus = request.form.get("style", "mixed"), request.form.get("focus", "").strip()
         input_format = request.form.get('input_format', 'auto')
-        if difficulty not in ("mixed", "beginner", "intermediate", "advanced") or engine not in ("extractive", "cloud", "ollama") or style not in ("mixed", "qa", "cloze"):
+        if difficulty not in ("mixed", "beginner", "intermediate", "advanced") or engine not in ("extractive", "cloud", "ollama", "llamacpp") or style not in ("mixed", "qa", "cloze"):
             raise UserError("Choose a valid difficulty and generator.", 400, "invalid_options")
         if input_format not in ('auto','qa','topics','prose'):
             raise UserError('Choose a valid document format.',400,'invalid_options')
@@ -326,29 +280,54 @@ def create_app(config=None):
                 raise UserError("Confirm sending document text to OpenAI before using Cloud AI.", 400, "cloud_consent_required")
             if not app.config["OPENAI_API_KEY"].strip():
                 raise UserError("Set OPENAI_API_KEY on the server to use Cloud AI, or choose Offline.", 503, "cloud_not_configured")
+        depth, detail = request.form.get('generation_depth', 'thorough'), request.form.get('answer_detail', 'expanded')
+        if depth not in ('flash', 'balanced', 'thorough') or detail not in ('focused', 'expanded'):
+            raise UserError('Choose a valid generation depth and answer detail.', 400, 'invalid_options')
+        base = request.form.get('llama_base', '').strip() or app.config['LLAMA_URL']
+        model = request.form.get('llama_model', '').strip() or app.config['LLAMA_MODEL']
+        if len(base) > 2000 or len(model) > 1024:
+            raise UserError('Local model settings are too long.', 400, 'invalid_fields')
+        wants_stream = engine == 'llamacpp' and 'application/x-ndjson' in request.headers.get('Accept', '')
+        # Copy config before the worker; neither request nor session crosses threads.
+        generation_config = {k: app.config[k] for k in ('LLAMA_API_KEY', 'OLLAMA_URL', 'OLLAMA_MODEL', 'OPENAI_API_KEY', 'CLOUD_MODEL')}
         if not generation_lock.acquire(blocking=False):
             raise UserError("Another document is processing. Try again shortly.", 429, "server_busy")
         try:
             raw = file.stream.read(MAX_FILE_BYTES + 1)
             document = app.config["EXTRACTOR"](raw, file.filename)
+        except Exception:
+            generation_lock.release(); raise
+        finally:
+            file.close()
+        def run_generation(progress=None):
             warnings = list(document.warnings)
             details = {}
-            if engine == "ollama":
-                cards, extra = ollama(document, count, difficulty, app.config["OLLAMA_URL"], app.config["OLLAMA_MODEL"], style, focus)
+            if engine == "llamacpp":
+                if progress:
+                    progress({'phase': 'connecting', 'message': 'Connecting to your selected local model…', 'accepted': 0, 'requested': count})
+                status = llama_discover(base, model, generation_config['LLAMA_API_KEY'])
+                cards, extra, report = llama_generate(document, count, difficulty, status, generation_config['LLAMA_API_KEY'], style, focus, depth, detail, progress)
+                warnings.extend(extra)
+                details.update(local_model=status['model'], generation_report=report)
+            elif engine == "ollama":
+                cards, extra = ollama(document, count, difficulty, generation_config["OLLAMA_URL"], generation_config["OLLAMA_MODEL"], style, focus)
                 warnings.extend(extra)
             elif engine == "cloud":
-                cards, extra = cloud_generate(document, count, difficulty, app.config["OPENAI_API_KEY"], app.config["CLOUD_MODEL"], style, focus)
+                cards, extra = cloud_generate(document, count, difficulty, generation_config["OPENAI_API_KEY"], generation_config["CLOUD_MODEL"], style, focus)
                 warnings.extend(extra)
             else:
                 cards, extra, details = extractive_details(document, count, difficulty, style, focus, input_format)
                 warnings.extend(extra)
             if len(cards) < count:
-                warnings.append(f"Created {len(cards)} supported cards instead of {count}; the source contained fewer usable facts.")
-            return jsonify(cards=cards, engine=engine, requested_count=count, generated_count=len(cards), warnings=warnings,
-                           card_types=dict(Counter(c.get('kind', 'fact') for c in cards)), **details)
+                warnings.append(f"Created {len(cards)} supported cards instead of {count}; see generation notes for local model limits." if engine == "llamacpp" else f"Created {len(cards)} supported cards instead of {count}; the source contained fewer usable facts.")
+            return dict(cards=cards, engine=engine, requested_count=count, generated_count=len(cards), warnings=warnings,
+                        card_types=dict(Counter(c.get('kind', 'fact') for c in cards)), **details)
+        if wants_stream:
+            return stream_generation(run_generation, generation_lock.release)
+        try:
+            return jsonify(run_generation())
         finally:
             generation_lock.release()
-            file.close()
 
     @app.route("/api/focus-sessions", methods=["GET", "POST", "DELETE"])
     def focus_sessions():
@@ -374,6 +353,8 @@ def create_app(config=None):
             raise UserError("Send a valid JSON object.", 400, "invalid_json")
         return jsonify(store.control(sid, token, data.get("action"), origin))
 
+    from backend.integration import register
+    register(app, device, csrf, data_dir)
     return app
 
 
@@ -381,15 +362,11 @@ if __name__ == "__main__":
     from waitress import serve
     import argparse
     parser = argparse.ArgumentParser(description="Run Aura Cards locally")
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=int(os.environ.get("PORT", os.environ.get("AURA_PORT", "5000")))
-    )
+    parser.add_argument("--port", type=int, default=os.environ.get("AURA_PORT", "5001"),
+                        help="Local listening port (or set AURA_PORT; default: 5001)")
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("Choose a port between 1024 and 65535.")
-    host = get_bind_host()
-    print(f"Aura Cards -> http://{host}:{args.port}", flush=True)
+    print(f"Aura Cards → http://localhost:{args.port}", flush=True)
     print("Press Ctrl+C to stop. Offline generation is local; Cloud AI is opt-in.", flush=True)
-    serve(create_app(), host=host, port=args.port, threads=4, max_request_body_size=MAX_FILE_BYTES + 1024 * 1024, inbuf_overflow=MAX_FILE_BYTES + 2 * 1024 * 1024)
+    serve(create_app(), host="127.0.0.1", port=args.port, threads=4, max_request_body_size=MAX_FILE_BYTES + 1024 * 1024, inbuf_overflow=MAX_FILE_BYTES + 2 * 1024 * 1024)

@@ -1,5 +1,13 @@
 # Changelog
 
+## Flash local generation
+
+- Add a remembered Flash mode alongside Balanced and Thorough in Upload notes.
+- Draft directly from selected passages with source/style/numeric/duplicate checks.
+- Skip model mapping and separate review in Flash, explicitly reported in results.
+- Bound Flash to three minutes of model work, with partial-result recovery.
+- Preserve existing advanced modes, answer-detail choices and local-only inference.
+
 ## 2.2.0
 
 - Parse complete Q&A and topic/explanation blocks before sentence generation.

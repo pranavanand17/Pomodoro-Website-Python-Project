@@ -5,6 +5,7 @@ import sqlite3
 import tempfile
 import threading
 import unittest
+from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from zipfile import ZipFile, ZIP_DEFLATED
 from pypdf import PdfWriter
@@ -103,8 +104,8 @@ class ApiTests(unittest.TestCase):
         for kind,factory in [('pdf',pdf_bytes),('docx',docx_bytes),('pptx',pptx_bytes)]:
             response=self.upload(factory(),'notes.'+kind)
             self.assertEqual(response.status_code,200,response.json);self.assertEqual(len(response.json['cards']),10)
-        self.assertEqual(sorted(p.name for p in Path(self.tmp.name).iterdir()),['focus.sqlite3'])
-        with sqlite3.connect(Path(self.tmp.name)/'focus.sqlite3') as db:
+        self.assertEqual(sorted(p.name for p in Path(self.tmp.name).iterdir()),['focus.sqlite3','study-library.sqlite3'])
+        with closing(sqlite3.connect(Path(self.tmp.name)/'focus.sqlite3')) as db:
             self.assertEqual(db.execute('SELECT count(*) FROM focus_sessions').fetchone()[0],0)
     def test_generation_validation_and_error_messages(self):
         for fields,code in [({'count':'51'},'invalid_count'),({'count':'no'},'invalid_count'),({'name':''},'invalid_fields'),({'difficulty':'wrong'},'invalid_options'),({'engine':'remote-ai'},'invalid_options')]:
