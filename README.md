@@ -1,3 +1,5 @@
+> **For this combined project**, use `../README_START_HERE.md` and run `python3 start_pair.py` from the combined project root. AuraCards runs on 5001 and Pomodoro on 8000.
+
 # Pomodoro + Aura Cards
 
 This folder contains two separate applications. Pomodoro is a Python
@@ -15,12 +17,12 @@ python -m pip install -r requirements.txt
 Install Aura Cards into its own virtual environment:
 
 ```powershell
-python -m venv Auracards-main\Auracards-main\.venv
-Auracards-main\Auracards-main\.venv\Scripts\python.exe -m pip install -r Auracards-main\Auracards-main\requirements.txt
+python -m venv ..\Auracards-main\.venv
+..\Auracards-main\.venv\Scripts\python.exe -m pip install -r ..\Auracards-main\requirements.txt
 ```
 
 No Node.js build step is needed: Aura Cards serves its existing frontend from
-`Auracards-main\Auracards-main\dist`.
+`..\Auracards-main\dist`.
 
 ## Start both on Windows
 
@@ -33,20 +35,20 @@ Run:
 The script creates a random, temporary shared integration token in the
 process environment and opens a separate terminal for each server:
 
-- Pomodoro: <http://127.0.0.1:5001>
-- Aura Cards: <http://127.0.0.1:5000>
+- Pomodoro: <http://127.0.0.1:8000>
+- Aura Cards: <http://127.0.0.1:5001>
 
 Close each server's terminal window to stop it. You can also start either
 application independently:
 
 ```powershell
-$env:PORT = "5001"
+$env:PORT = "8000"
 python server.py
 ```
 
 ```powershell
-Set-Location Auracards-main\Auracards-main
-.venv\Scripts\python.exe app.py --port 5000
+Set-Location ..\Auracards-main
+.venv\Scripts\python.exe app.py --port 5001
 ```
 
 For integration while starting the apps separately, set the same
@@ -55,7 +57,7 @@ Set `POMODORO_URL` and `POMODORO_API_URL` in Aura's environment, and
 `AURACARDS_URL` and `AURACARDS_API_URL` in Pomodoro's environment. The
 defaults match the local URLs above. Set `POMODORO_DB` to use a different
 Pomodoro SQLite file; otherwise the existing `pomodoro.db` is used. To use
-the side panel, set `AURA_FRAME_ORIGINS=http://127.0.0.1:5001` in Aura's
+the side panel, set `AURA_FRAME_ORIGINS=http://127.0.0.1:8000` in Aura's
 environment.
 
 Aura's interface opens in a slide-out panel inside Pomodoro. Its frame
@@ -90,7 +92,7 @@ Authorization: Bearer <STUDY_INTEGRATION_TOKEN>
 Example local summary call from PowerShell after setting the token:
 
 ```powershell
-Invoke-RestMethod http://127.0.0.1:5001/api/integrations/summary `
+Invoke-RestMethod http://127.0.0.1:8000/api/integrations/summary `
   -Headers @{ Authorization = "Bearer $env:STUDY_INTEGRATION_TOKEN" }
 ```
 

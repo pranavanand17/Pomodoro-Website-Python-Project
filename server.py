@@ -10,6 +10,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from integration import IntegrationError, fetch_summary, service_url
+from timer_service import timer_request, TimerError
+from local_bridge import peer_call
 
 # ============================================================
 # CONFIGURATION
@@ -19,11 +21,11 @@ BASE_DIR = Path(__file__).resolve().parent
 DB_FILE = Path(os.environ.get("POMODORO_DB", BASE_DIR / "pomodoro.db"))
 
 HOST = os.environ.get("HOST", "127.0.0.1")
-PORT = int(os.environ.get("PORT", "5001"))
-AURACARDS_URL = os.environ.get("AURACARDS_URL", "http://127.0.0.1:5000")
+PORT = int(os.environ.get("PORT", "8000"))
+AURACARDS_URL = os.environ.get("AURACARDS_URL", os.environ.get("AURA_URL", "http://127.0.0.1:5001"))
 AURACARDS_API_URL = os.environ.get(
     "AURACARDS_API_URL",
-    "http://127.0.0.1:5000"
+    AURACARDS_URL
 )
 
 GEMINI_MODEL = os.environ.get(
@@ -357,6 +359,30 @@ class PomodoroHandler(SimpleHTTPRequestHandler):
 
         return True
 
+    def timer_api(self, payload=None):
+        try:
+            with database() as db:
+                state = timer_request(db, DEFAULT_SETTINGS, payload)
+            self.send_json(state)
+        except TimerError as error:
+            self.api_error(str(error), error.status)
+
+    def local_api_only(self):
+        # Only trusted same-origin browser calls and loopback peer calls may
+        # mutate the shared timer or fetch deck snapshots.
+        origin = self.headers.get("Origin")
+        fetch_site = self.headers.get("Sec-Fetch-Site")
+        host = self.headers.get("Host", "")
+        try:
+            parsed = urlparse("http://" + host)
+            allowed = parsed.hostname in ("localhost", "127.0.0.1", "::1") and parsed.port == self.server.server_port
+        except ValueError:
+            allowed = False
+        if not allowed or (origin and origin != "http://" + host) or fetch_site == "cross-site":
+            self.api_error("This API is available only to local same-origin clients.", 403)
+            return False
+        return True
+
     # --------------------------------------------------------
     # AI STUDY SIDEKICK
     # --------------------------------------------------------
@@ -522,6 +548,21 @@ class PomodoroHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
 
+        if path == "/api/timer":
+            if self.local_api_only():
+                self.timer_api()
+            return
+
+        if path == "/api/aura/decks":
+            if not self.local_api_only():
+                return
+            try:
+                decks, status = peer_call("AURA_URL", AURACARDS_URL, "/api/integration/decks")
+                self.send_json(decks, status)
+            except ValueError as error:
+                self.api_error(str(error), 503)
+            return
+
         if path == "/api/health":
             self.send_json({"status": "ok", "service": "pomodoro"})
             return
@@ -631,6 +672,18 @@ class PomodoroHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
+
+        if path == "/api/timer":
+            if not self.local_api_only():
+                return
+            if self.headers.get("Content-Type", "").split(";", 1)[0] != "application/json":
+                self.api_error("Use application/json.", 415)
+                return
+            try:
+                self.timer_api(self.read_json())
+            except (ValueError, UnicodeError) as error:
+                self.api_error("Invalid JSON payload.")
+            return
 
         # Route chat before the other POST operations.
         if path == "/api/chat":
@@ -843,13 +896,21 @@ class PomodoroHandler(SimpleHTTPRequestHandler):
                     ),
                 }
 
-                with database() as db:
-                    set_app_value(db, "settings", clean_settings)
+                # Keep the existing settings screen and response shape while
+                # synchronizing modern Aura's authoritative shared timer.
+                try:
+                    with database() as db:
+                        revision = timer_request(db, DEFAULT_SETTINGS)["revision"]
+                        timer_request(db, DEFAULT_SETTINGS, {
+                            "action": "settings_legacy",
+                            "settings": clean_settings,
+                            "revision": revision,
+                        })
+                except TimerError as error:
+                    self.api_error(str(error), error.status)
+                    return
 
-                self.send_json({
-                    "success": True,
-                    "settings": clean_settings,
-                })
+                self.send_json({"success": True, "settings": clean_settings})
 
                 return
 
