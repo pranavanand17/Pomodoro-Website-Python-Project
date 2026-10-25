@@ -1,4 +1,4 @@
-> **For this combined project**, use `../README_START_HERE.md` and run `python3 start_pair.py` from the combined project root. AuraCards runs on 5001 and Pomodoro on 8000.
+
 
 # Pomodoro + Aura Cards
 
