@@ -143,6 +143,11 @@ class BidirectionalIntegrationTests(unittest.TestCase):
             with response:
                 return response.code, json.loads(response.read())
 
+    def test_pomodoro_health_check(self):
+        status, payload = self.request_json(self.pomodoro_url + "/api/health")
+        self.assertEqual(status, 200)
+        self.assertEqual(payload, {"status": "ok", "service": "pomodoro"})
+
     def test_each_service_requests_the_other_service_summary(self):
         status, pomodoro_summary = self.request_json(
             self.aura_url + "/api/integrations/pomodoro"

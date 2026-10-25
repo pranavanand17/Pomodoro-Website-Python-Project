@@ -119,3 +119,42 @@ development servers without those protections.
 The apps retain separate data stores: Pomodoro uses `pomodoro.db`; Aura keeps
 its focus metadata in its own `.aura-data` directory and stores decks in the
 browser. Integration sends only summary totals and session-control requests.
+
+## Deploy both apps to Render
+
+This repository includes a Render Blueprint (`render.yaml`) that creates two
+Python web services: Pomodoro and Aura Cards. Each service has its own
+persistent disk for SQLite data. Persistent disks require paid Render
+instances; do not remove the disks if you need data to survive deploys and
+restarts.
+
+1. Push this repository to GitHub, then in Render choose **New → Blueprint**
+   and connect the repository. Render reads `render.yaml` and creates both
+   services and the shared integration-token environment group.
+2. Wait for both services to finish their first deploy. Copy each public
+   `onrender.com` URL from its service page; Render assigns these URLs when
+   it creates the services.
+3. In the **pomodoro-website** service's environment, set
+   `AURACARDS_URL` and `AURACARDS_API_URL` to the full Aura Cards URL, for
+   example `https://aura-cards-example.onrender.com`.
+4. In the **aura-cards** service's environment, set `POMODORO_URL` and
+   `POMODORO_API_URL` to the full Pomodoro URL, and set
+   `AURA_FRAME_ORIGINS` to that same URL's origin (scheme and hostname only,
+   with no trailing slash or path).
+5. Keep `STUDY_INTEGRATION_TOKEN` from the shared environment group in both
+   services. Render generates it once for the group; do not replace it with
+   different values in the individual services. Save the changed variables
+   and let Render redeploy.
+
+Both apps should then load from their public URLs. The Blueprint binds each
+server to Render's public interface, uses Render's assigned `PORT`, enables
+secure Aura session cookies, and configures health checks. Aura automatically
+trusts its Render-provided hostname. If you add a custom domain, add its
+hostname (without `https://`) to Aura's comma-separated
+`AURA_TRUSTED_HOSTS` environment variable as well.
+
+Gemini Study Sidekick and Aura's optional Cloud AI are not required to run
+the apps. To enable them, set `GEMINI_API_KEY` on **pomodoro-website** and
+`OPENAI_API_KEY` on **aura-cards**, respectively. Decks remain in each
+user's browser; Aura's disk stores focus-session metadata, and Pomodoro's
+disk stores its timer data.

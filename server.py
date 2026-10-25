@@ -18,7 +18,7 @@ from integration import IntegrationError, fetch_summary, service_url
 BASE_DIR = Path(__file__).resolve().parent
 DB_FILE = Path(os.environ.get("POMODORO_DB", BASE_DIR / "pomodoro.db"))
 
-HOST = "127.0.0.1"
+HOST = os.environ.get("HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", "5001"))
 AURACARDS_URL = os.environ.get("AURACARDS_URL", "http://127.0.0.1:5000")
 AURACARDS_API_URL = os.environ.get(
@@ -521,6 +521,10 @@ class PomodoroHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+
+        if path == "/api/health":
+            self.send_json({"status": "ok", "service": "pomodoro"})
+            return
 
         if path == "/api/integrations/config":
             try:

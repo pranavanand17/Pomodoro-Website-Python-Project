@@ -67,11 +67,21 @@ def configured_frame_origins(value):
 def create_app(config=None):
     app = Flask(__name__, static_folder=str(ROOT / "dist"), static_url_path="")
     app.request_class = MemoryRequest
+    trusted_hosts = {"localhost", "127.0.0.1", "[::1]"}
+    trusted_hosts.update(
+        host.strip()
+        for host in os.environ.get("AURA_TRUSTED_HOSTS", "").split(",")
+        if host.strip()
+    )
+    render_hostname = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
+    if render_hostname:
+        trusted_hosts.add(render_hostname)
     app.config.update(
         MAX_CONTENT_LENGTH=MAX_FILE_BYTES + 1024 * 1024,
         MAX_FORM_MEMORY_SIZE=256 * 1024, MAX_FORM_PARTS=12,
         SESSION_COOKIE_NAME="aura_device", SESSION_COOKIE_HTTPONLY=True,
-        SESSION_COOKIE_SAMESITE="Strict", SESSION_COOKIE_SECURE=False,
+        SESSION_COOKIE_SAMESITE="Strict",
+        SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "").lower() in ("1", "true", "yes"),
         PERMANENT_SESSION_LIFETIME=timedelta(days=90),
         DATA_DIR=os.environ.get("AURA_DATA_DIR", str(ROOT / ".aura-data")),
         OLLAMA_URL=os.environ.get("AURA_OLLAMA_URL", "http://127.0.0.1:11434"),
@@ -90,7 +100,7 @@ def create_app(config=None):
         AURA_FRAME_ORIGINS=os.environ.get("AURA_FRAME_ORIGINS", ""),
         EXTRACTOR=extract_isolated, FOCUS_CLOCK=time.time,
         ALLOWED_ORIGINS=set(filter(None, os.environ.get("AURA_ALLOWED_ORIGINS", "").split(","))),
-        TRUSTED_HOSTS=["localhost", "127.0.0.1", "[::1]"],
+        TRUSTED_HOSTS=sorted(trusted_hosts),
     )
     if config:
         app.config.update(config)
@@ -368,11 +378,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--port",
         type=int,
-        default=int(os.environ.get("AURA_PORT", "5000"))
+        default=int(os.environ.get("PORT", os.environ.get("AURA_PORT", "5000")))
     )
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("Choose a port between 1024 and 65535.")
-    print(f"Aura Cards -> http://localhost:{args.port}", flush=True)
+    host = os.environ.get("HOST", "127.0.0.1")
+    print(f"Aura Cards -> http://{host}:{args.port}", flush=True)
     print("Press Ctrl+C to stop. Offline generation is local; Cloud AI is opt-in.", flush=True)
-    serve(create_app(), host="127.0.0.1", port=args.port, threads=4, max_request_body_size=MAX_FILE_BYTES + 1024 * 1024, inbuf_overflow=MAX_FILE_BYTES + 2 * 1024 * 1024)
+    serve(create_app(), host=host, port=args.port, threads=4, max_request_body_size=MAX_FILE_BYTES + 1024 * 1024, inbuf_overflow=MAX_FILE_BYTES + 2 * 1024 * 1024)
