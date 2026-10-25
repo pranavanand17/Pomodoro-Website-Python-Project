@@ -20,6 +20,12 @@ from backend.cloud import generate as cloud_generate
 ROOT = Path(__file__).resolve().parent
 
 
+def get_bind_host():
+    if os.environ.get("RENDER_EXTERNAL_HOSTNAME"):
+        return "0.0.0.0"
+    return os.environ.get("HOST", "127.0.0.1")
+
+
 class MemoryRequest(Request):
     def _get_file_stream(self, total_content_length, content_type, filename=None, content_length=None):
         return BytesIO()
@@ -383,7 +389,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("Choose a port between 1024 and 65535.")
-    host = os.environ.get("HOST", "127.0.0.1")
+    host = get_bind_host()
     print(f"Aura Cards -> http://{host}:{args.port}", flush=True)
     print("Press Ctrl+C to stop. Offline generation is local; Cloud AI is opt-in.", flush=True)
     serve(create_app(), host=host, port=args.port, threads=4, max_request_body_size=MAX_FILE_BYTES + 1024 * 1024, inbuf_overflow=MAX_FILE_BYTES + 2 * 1024 * 1024)

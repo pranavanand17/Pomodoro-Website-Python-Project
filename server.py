@@ -18,7 +18,14 @@ from integration import IntegrationError, fetch_summary, service_url
 BASE_DIR = Path(__file__).resolve().parent
 DB_FILE = Path(os.environ.get("POMODORO_DB", BASE_DIR / "pomodoro.db"))
 
-HOST = os.environ.get("HOST", "127.0.0.1")
+
+def get_bind_host():
+    if os.environ.get("RENDER_EXTERNAL_HOSTNAME"):
+        return "0.0.0.0"
+    return os.environ.get("HOST", "127.0.0.1")
+
+
+HOST = get_bind_host()
 PORT = int(os.environ.get("PORT", "5001"))
 AURACARDS_URL = os.environ.get("AURACARDS_URL", "http://127.0.0.1:5000")
 AURACARDS_API_URL = os.environ.get(
