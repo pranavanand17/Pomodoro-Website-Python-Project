@@ -56,7 +56,18 @@ def timer_request_is_same_origin(host, origin, fetch_site, server_port):
 
 HOST = get_bind_host()
 PORT = int(os.environ.get("PORT", "8000"))
-AURACARDS_URL = os.environ.get("AURACARDS_URL", os.environ.get("AURA_URL", "http://127.0.0.1:5001"))
+# PASTE YOUR AURACARDS RENDER WEBSITE LINK BETWEEN THE QUOTES BELOW.
+# Example: "https://your-auracards-service.onrender.com"
+# Leave empty to use local AuraCards on port 5001.
+AURACARDS_WEBSITE_URL = "https://auracards.onrender.com"
+
+# Render environment settings take priority over the optional value above.
+AURACARDS_URL = service_url(
+    os.environ.get("AURACARDS_URL", "").strip()
+    or os.environ.get("AURA_URL", "").strip()
+    or AURACARDS_WEBSITE_URL.strip()
+    or "http://127.0.0.1:5001"
+)
 AURACARDS_API_URL = os.environ.get(
     "AURACARDS_API_URL",
     AURACARDS_URL
